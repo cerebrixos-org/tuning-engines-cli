@@ -1,0 +1,53 @@
+{
+  "name": "tuningengines-cli",
+  "version": "0.3.5",
+  "description": "Fine-tune and train open-source LLMs and SLMs with zero infrastructure. Tuning Engines CLI and MCP server for domain-specific model training — own your sovereign AI model, fine-tuned on your data via specialized tuning agents. Supports Qwen, Llama, DeepSeek, Mistral, Gemma, Phi, StarCoder, CodeLlama from 1B to 72B parameters. LoRA, QLoRA, full fine-tuning. Cost estimation, model management, S3 import/export. 18 MCP tools for Claude Desktop, Claude Code, Cursor, Windsurf, and any MCP-compatible AI assistant.",
+  "main": "dist/cli.js",
+  "bin": {
+    "te": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "license": "MIT",
+  "mcpName": "io.github.cerebrixos/tuning-engines",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cerebrixos-org/tuning-engines-cli.git"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "llm",
+    "fine-tuning",
+    "fine-tune",
+    "training",
+    "ai",
+    "claude",
+    "chatgpt",
+    "cursor",
+    "tuning-engines",
+    "machine-learning",
+    "lora",
+    "llama"
+  ],
+  "homepage": "https://tuningengines.com"
+}

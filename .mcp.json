@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "tuning-engines": {
+      "command": "npx",
+      "args": ["-y", "tuningengines-cli", "mcp", "serve"],
+      "env": {
+        "TE_API_KEY": "${TE_API_KEY}"
+      }
+    }
+  }
+}

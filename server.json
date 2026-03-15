@@ -1,0 +1,28 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.cerebrixos/tuning-engines",
+  "description": "Domain-specific LLM fine-tuning — sovereign models trained on your data, zero infrastructure.",
+  "repository": {
+    "url": "https://github.com/cerebrixos-org/tuning-engines-cli",
+    "source": "github"
+  },
+  "version": "0.3.5",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "tuningengines-cli",
+      "version": "0.3.5",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "TE_API_KEY",
+          "description": "Tuning Engines API key. Get one at https://tuningengines.com or by running 'te auth login'.",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
