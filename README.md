@@ -1,5 +1,7 @@
 # Tuning Engines CLI & MCP Server
 
+[![tuning-engines-cli MCP server](https://glama.ai/mcp/servers/cerebrixos-org/tuning-engines-cli/badges/card.svg)](https://glama.ai/mcp/servers/cerebrixos-org/tuning-engines-cli)
+
 [![npm version](https://img.shields.io/npm/v/tuningengines-cli.svg)](https://www.npmjs.com/package/tuningengines-cli)
 [![MCP Registry](https://img.shields.io/badge/MCP_Registry-tuning--engines-blue)](https://registry.modelcontextprotocol.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
