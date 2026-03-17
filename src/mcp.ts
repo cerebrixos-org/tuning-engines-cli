@@ -8,10 +8,19 @@ import { TuningEnginesClient } from "./client";
 import { getApiKey, getApiUrl } from "./config";
 
 export async function startMcpServer(): Promise<void> {
-  const client = new TuningEnginesClient({
-    apiKey: getApiKey(),
-    apiUrl: getApiUrl(),
-  });
+  // Lazy client initialization — deferred until a tool is called.
+  // This allows the server to start and list tools without a valid API key,
+  // which is required for Glama inspection and tool detection.
+  let _client: TuningEnginesClient | null = null;
+  const getClient = (): TuningEnginesClient => {
+    if (!_client) {
+      _client = new TuningEnginesClient({
+        apiKey: getApiKey(),
+        apiUrl: getApiUrl(),
+      });
+    }
+    return _client;
+  };
 
   const server = new Server(
     { name: "tuning-engines", version: "0.3.5" },
@@ -375,14 +384,14 @@ export async function startMcpServer(): Promise<void> {
 
       switch (name) {
         case "list_jobs":
-          result = await client.listJobs({
+          result = await getClient().listJobs({
             status: args?.status as string | undefined,
             limit: args?.limit as number | undefined,
           });
           break;
 
         case "show_job":
-          result = await client.getJob(args!.job_id as string);
+          result = await getClient().getJob(args!.job_id as string);
           break;
 
         case "create_job":
@@ -392,7 +401,7 @@ export async function startMcpServer(): Promise<void> {
               isError: true,
             };
           }
-          result = await client.createJob({
+          result = await getClient().createJob({
             base_model: args?.base_model as string | undefined,
             base_user_model_id: args?.base_user_model_id as string | undefined,
             output_name: args!.output_name as string,
@@ -410,15 +419,15 @@ export async function startMcpServer(): Promise<void> {
           break;
 
         case "cancel_job":
-          result = await client.cancelJob(args!.job_id as string);
+          result = await getClient().cancelJob(args!.job_id as string);
           break;
 
         case "job_status":
-          result = await client.getJobStatus(args!.job_id as string);
+          result = await getClient().getJobStatus(args!.job_id as string);
           break;
 
         case "retry_job":
-          result = await client.retryJob(
+          result = await getClient().retryJob(
             args!.job_id as string,
             args?.github_token as string | undefined,
           );
@@ -431,7 +440,7 @@ export async function startMcpServer(): Promise<void> {
               isError: true,
             };
           }
-          result = await client.estimateJob({
+          result = await getClient().estimateJob({
             base_model: args?.base_model as string | undefined,
             base_user_model_id: args?.base_user_model_id as string | undefined,
             num_epochs: args?.num_epochs as number | undefined,
@@ -441,7 +450,7 @@ export async function startMcpServer(): Promise<void> {
           break;
 
         case "validate_s3":
-          result = await client.validateS3({
+          result = await getClient().validateS3({
             s3_bucket: args!.s3_bucket as string,
             s3_access_key_id: args!.s3_access_key_id as string,
             s3_secret_access_key: args!.s3_secret_access_key as string,
@@ -450,31 +459,31 @@ export async function startMcpServer(): Promise<void> {
           break;
 
         case "list_models":
-          result = await client.listUserModels();
+          result = await getClient().listUserModels();
           break;
 
         case "show_model":
-          result = await client.getUserModel(args!.model_id as string);
+          result = await getClient().getUserModel(args!.model_id as string);
           break;
 
         case "delete_model":
-          result = await client.deleteUserModel(args!.model_id as string);
+          result = await getClient().deleteUserModel(args!.model_id as string);
           break;
 
         case "get_balance":
-          result = await client.getBilling();
+          result = await getClient().getBilling();
           break;
 
         case "get_account":
-          result = await client.getAccount();
+          result = await getClient().getAccount();
           break;
 
         case "list_supported_models":
-          result = await client.listModels();
+          result = await getClient().listModels();
           break;
 
         case "import_model":
-          result = await client.importModel({
+          result = await getClient().importModel({
             name: args!.name as string,
             source_s3_url: args!.source_s3_url as string,
             base_model: args!.base_model as string,
@@ -485,7 +494,7 @@ export async function startMcpServer(): Promise<void> {
           break;
 
         case "export_model":
-          result = await client.exportModel(args!.model_id as string, {
+          result = await getClient().exportModel(args!.model_id as string, {
             s3_bucket: args!.s3_bucket as string,
             s3_prefix: args?.s3_prefix as string | undefined,
             s3_access_key_id: args!.s3_access_key_id as string,
@@ -496,7 +505,7 @@ export async function startMcpServer(): Promise<void> {
           break;
 
         case "model_status":
-          result = await client.getUserModelStatus(args!.model_id as string);
+          result = await getClient().getUserModelStatus(args!.model_id as string);
           break;
 
         default:

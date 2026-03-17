@@ -7,10 +7,19 @@ const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const client_1 = require("./client");
 const config_1 = require("./config");
 async function startMcpServer() {
-    const client = new client_1.TuningEnginesClient({
-        apiKey: (0, config_1.getApiKey)(),
-        apiUrl: (0, config_1.getApiUrl)(),
-    });
+    // Lazy client initialization — deferred until a tool is called.
+    // This allows the server to start and list tools without a valid API key,
+    // which is required for Glama inspection and tool detection.
+    let _client = null;
+    const getClient = () => {
+        if (!_client) {
+            _client = new client_1.TuningEnginesClient({
+                apiKey: (0, config_1.getApiKey)(),
+                apiUrl: (0, config_1.getApiUrl)(),
+            });
+        }
+        return _client;
+    };
     const server = new index_js_1.Server({ name: "tuning-engines", version: "0.3.5" }, {
         capabilities: { tools: {} },
         instructions: "Tuning Engines — Domain-specific fine-tuning of open-source LLMs and SLMs. Own your sovereign model with zero infrastructure.\n\n" +
@@ -339,13 +348,13 @@ async function startMcpServer() {
             let result;
             switch (name) {
                 case "list_jobs":
-                    result = await client.listJobs({
+                    result = await getClient().listJobs({
                         status: args?.status,
                         limit: args?.limit,
                     });
                     break;
                 case "show_job":
-                    result = await client.getJob(args.job_id);
+                    result = await getClient().getJob(args.job_id);
                     break;
                 case "create_job":
                     if (!args?.base_model && !args?.base_user_model_id) {
@@ -354,7 +363,7 @@ async function startMcpServer() {
                             isError: true,
                         };
                     }
-                    result = await client.createJob({
+                    result = await getClient().createJob({
                         base_model: args?.base_model,
                         base_user_model_id: args?.base_user_model_id,
                         output_name: args.output_name,
@@ -371,13 +380,13 @@ async function startMcpServer() {
                     });
                     break;
                 case "cancel_job":
-                    result = await client.cancelJob(args.job_id);
+                    result = await getClient().cancelJob(args.job_id);
                     break;
                 case "job_status":
-                    result = await client.getJobStatus(args.job_id);
+                    result = await getClient().getJobStatus(args.job_id);
                     break;
                 case "retry_job":
-                    result = await client.retryJob(args.job_id, args?.github_token);
+                    result = await getClient().retryJob(args.job_id, args?.github_token);
                     break;
                 case "estimate_job":
                     if (!args?.base_model && !args?.base_user_model_id) {
@@ -386,7 +395,7 @@ async function startMcpServer() {
                             isError: true,
                         };
                     }
-                    result = await client.estimateJob({
+                    result = await getClient().estimateJob({
                         base_model: args?.base_model,
                         base_user_model_id: args?.base_user_model_id,
                         num_epochs: args?.num_epochs,
@@ -395,7 +404,7 @@ async function startMcpServer() {
                     });
                     break;
                 case "validate_s3":
-                    result = await client.validateS3({
+                    result = await getClient().validateS3({
                         s3_bucket: args.s3_bucket,
                         s3_access_key_id: args.s3_access_key_id,
                         s3_secret_access_key: args.s3_secret_access_key,
@@ -403,25 +412,25 @@ async function startMcpServer() {
                     });
                     break;
                 case "list_models":
-                    result = await client.listUserModels();
+                    result = await getClient().listUserModels();
                     break;
                 case "show_model":
-                    result = await client.getUserModel(args.model_id);
+                    result = await getClient().getUserModel(args.model_id);
                     break;
                 case "delete_model":
-                    result = await client.deleteUserModel(args.model_id);
+                    result = await getClient().deleteUserModel(args.model_id);
                     break;
                 case "get_balance":
-                    result = await client.getBilling();
+                    result = await getClient().getBilling();
                     break;
                 case "get_account":
-                    result = await client.getAccount();
+                    result = await getClient().getAccount();
                     break;
                 case "list_supported_models":
-                    result = await client.listModels();
+                    result = await getClient().listModels();
                     break;
                 case "import_model":
-                    result = await client.importModel({
+                    result = await getClient().importModel({
                         name: args.name,
                         source_s3_url: args.source_s3_url,
                         base_model: args.base_model,
@@ -431,7 +440,7 @@ async function startMcpServer() {
                     });
                     break;
                 case "export_model":
-                    result = await client.exportModel(args.model_id, {
+                    result = await getClient().exportModel(args.model_id, {
                         s3_bucket: args.s3_bucket,
                         s3_prefix: args?.s3_prefix,
                         s3_access_key_id: args.s3_access_key_id,
@@ -441,7 +450,7 @@ async function startMcpServer() {
                     });
                     break;
                 case "model_status":
-                    result = await client.getUserModelStatus(args.model_id);
+                    result = await getClient().getUserModelStatus(args.model_id);
                     break;
                 default:
                     return {
