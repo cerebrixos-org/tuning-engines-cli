@@ -1,7 +1,7 @@
 {
   "name": "tuningengines-cli",
-  "version": "0.3.5",
-  "description": "Fine-tune and train open-source LLMs and SLMs with zero infrastructure. Tuning Engines CLI and MCP server for domain-specific model training — own your sovereign AI model, fine-tuned on your data via specialized tuning agents. Supports Qwen, Llama, DeepSeek, Mistral, Gemma, Phi, StarCoder, CodeLlama from 1B to 72B parameters. LoRA, QLoRA, full fine-tuning. Cost estimation, model management, S3 import/export. 18 MCP tools for Claude Desktop, Claude Code, Cursor, Windsurf, and any MCP-compatible AI assistant.",
+  "version": "0.3.6",
+  "description": "Fine-tune and train open-source LLMs and SLMs with zero infrastructure, plus a Marketplace of pre-built fine-tuned models and datasets. Tuning Engines CLI and MCP server for domain-specific model training — own your sovereign AI model, fine-tuned on your data via specialized tuning agents. Supports Qwen, Llama, DeepSeek, Mistral, Gemma, Phi, StarCoder, CodeLlama from 1B to 72B parameters. LoRA, QLoRA, full fine-tuning. Cost estimation, model management, S3 import/export, Marketplace catalog browsing and export. 22 MCP tools for Claude Desktop, Claude Code, Cursor, Windsurf, and any MCP-compatible AI assistant.",
   "main": "dist/cli.js",
   "bin": {
     "te": "dist/cli.js"

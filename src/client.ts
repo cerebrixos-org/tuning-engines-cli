@@ -79,6 +79,7 @@ export class TuningEnginesClient {
     max_examples?: number;
     repo_size_mb?: number;
     base_user_model_id?: string;
+    use_case?: string;
   }): Promise<any> {
     return this.request("POST", "/api/v1/jobs/estimate", params);
   }
@@ -130,6 +131,44 @@ export class TuningEnginesClient {
     );
   }
 
+  // --- Catalog (Marketplace) ---
+
+  async listCatalogModels(options?: {
+    category?: string;
+    limit?: number;
+  }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.category) params.set("category", options.category);
+    if (options?.limit) params.set("limit", String(options.limit));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/catalog${qs ? `?${qs}` : ""}`);
+  }
+
+  async getCatalogModel(modelId: string): Promise<any> {
+    return this.request("GET", `/api/v1/catalog/${modelId}`);
+  }
+
+  async exportCatalogModel(
+    modelId: string,
+    params: {
+      s3_bucket: string;
+      s3_prefix?: string;
+      s3_access_key_id: string;
+      s3_secret_access_key: string;
+      s3_region: string;
+    }
+  ): Promise<any> {
+    return this.request(
+      "POST",
+      `/api/v1/catalog/${modelId}/export`,
+      params
+    );
+  }
+
+  async getCatalogExportStatus(modelId: string, exportId: string): Promise<any> {
+    return this.request("GET", `/api/v1/catalog/${modelId}/export/${exportId}/status`);
+  }
+
   // --- S3 Validation ---
 
   async validateS3(params: {
@@ -143,8 +182,11 @@ export class TuningEnginesClient {
 
   // --- Supported Models ---
 
-  async listModels(): Promise<any> {
-    return this.request("GET", "/api/v1/models");
+  async listModels(options?: { agent?: string }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.agent) params.set("agent", options.agent);
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/models${qs ? `?${qs}` : ""}`);
   }
 
   // --- Billing ---

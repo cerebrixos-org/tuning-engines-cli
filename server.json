@@ -6,12 +6,12 @@
     "url": "https://github.com/cerebrixos-org/tuning-engines-cli",
     "source": "github"
   },
-  "version": "0.3.5",
+  "version": "0.3.6",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "tuningengines-cli",
-      "version": "0.3.5",
+      "version": "0.3.6",
       "transport": {
         "type": "stdio"
       },

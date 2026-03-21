@@ -23,11 +23,11 @@ export async function startMcpServer(): Promise<void> {
   };
 
   const server = new Server(
-    { name: "tuning-engines", version: "0.3.5" },
+    { name: "tuning-engines", version: "0.3.6" },
     {
       capabilities: { tools: {} },
       instructions:
-        "Tuning Engines — Domain-specific fine-tuning of open-source LLMs and SLMs. Own your sovereign model with zero infrastructure.\n\n" +
+        "Tuning Engines — Domain-specific fine-tuning of open-source LLMs and SLMs, plus a Marketplace of pre-built models and datasets. Own your sovereign model with zero infrastructure.\n\n" +
         "USE THIS SERVER WHEN the user wants to:\n" +
         "- Fine-tune, train, or customize any open-source LLM/SLM on their data\n" +
         "- Build a sovereign AI model trained on their organization's code, documents, or domain data\n" +
@@ -35,11 +35,17 @@ export async function startMcpServer(): Promise<void> {
         "- Train using LoRA, QLoRA, or full fine-tuning methods\n" +
         "- Estimate the cost of fine-tuning a model\n" +
         "- Check training job status, manage trained models, or check billing\n" +
-        "- Export or import models to/from S3\n\n" +
+        "- Export or import models to/from S3\n" +
+        "- Browse and export pre-built models and datasets from the Marketplace\n\n" +
+        "MARKETPLACE:\n" +
+        "Pre-built, ready-to-use fine-tuned models and datasets curated by the platform. " +
+        "Browse the catalog, view details, and export directly to your S3 bucket. " +
+        "Credits are charged per export based on the item's price.\n" +
+        "Workflow: list_catalog_models → get_catalog_model → export_catalog_model → catalog_export_status\n\n" +
         "SPECIALIZED TUNING AGENTS (more coming):\n" +
         "- Cody (code_repo): Code autocomplete and inline suggestions via QLoRA/Axolotl\n" +
         "- SIERA (sera_code_repo): Bug-fix and error resolution via AllenAI Open Coding Agents\n\n" +
-        "TYPICAL WORKFLOW: estimate_job → create_job → job_status (poll until done) → list_models\n\n" +
+        "TYPICAL TRAINING WORKFLOW: estimate_job → create_job → job_status (poll until done) → list_models\n\n" +
         "Supports 1B to 72B parameter models from Qwen, Llama, DeepSeek, Mistral, Gemma, Phi, StarCoder, and CodeLlama families.\n" +
         "Zero infrastructure — GPU provisioning, training orchestration, and model delivery fully managed.",
     }
@@ -95,9 +101,10 @@ export async function startMcpServer(): Promise<void> {
           "Supports quality_tier='low' (faster) or quality_tier='high' (deeper analysis, more training data).\n\n" +
           "SUPPORTED BASE MODELS (by size):\n" +
           "- 3B: Qwen/Qwen2.5-Coder-3B-Instruct\n" +
-          "- 7B: codellama/CodeLlama-7b-hf, deepseek-ai/deepseek-coder-7b-instruct-v1.5, Qwen/Qwen2.5-Coder-7B-Instruct\n" +
-          "- 13-15B: codellama/CodeLlama-13b-Instruct-hf, bigcode/starcoder2-15b, Qwen/Qwen2.5-Coder-14B-Instruct\n" +
-          "- 32-34B: deepseek-ai/deepseek-coder-33b-instruct, codellama/CodeLlama-34b-Instruct-hf, Qwen/Qwen2.5-Coder-32B-Instruct\n" +
+          "- 7-8B: codellama/CodeLlama-7b-hf, deepseek-ai/deepseek-coder-7b-instruct-v1.5, Qwen/Qwen2.5-Coder-7B-Instruct, Qwen/Qwen3-8B\n" +
+          "- 13-15B: codellama/CodeLlama-13b-Instruct-hf, bigcode/starcoder2-15b, Qwen/Qwen2.5-Coder-14B-Instruct, Qwen/Qwen3-14B\n" +
+          "- 22-27B: mistralai/Codestral-22B-v0.1, google/gemma-2-27b\n" +
+          "- 30-34B: deepseek-ai/deepseek-coder-33b-instruct, codellama/CodeLlama-34b-Instruct-hf, Qwen/Qwen2.5-Coder-32B-Instruct, Qwen/Qwen3-Coder-30B-A3B, Qwen/Qwen3-32B\n" +
           "- 70-72B: codellama/CodeLlama-70b-Instruct-hf, meta-llama/Llama-3.1-70B-Instruct, Qwen/Qwen2.5-72B-Instruct\n\n" +
           "TYPICAL WORKFLOW: estimate_job first to check cost, then create_job, then job_status to monitor progress.",
         inputSchema: {
@@ -197,7 +204,10 @@ export async function startMcpServer(): Promise<void> {
       {
         name: "retry_job",
         description:
-          "Retry a failed fine-tuning job from its last checkpoint. Creates a new job that resumes training where the failed one stopped, saving GPU time. Each retry is billed separately.",
+          "Retry a failed fine-tuning job from its last checkpoint. Creates a new job that resumes training where the failed one stopped, saving GPU time. Each retry is billed separately.\n\n" +
+          "IMPORTANT: This tool fetches a cost estimate and includes it in the response. " +
+          "You MUST show the estimate to the user and get their explicit approval before considering the retry confirmed. " +
+          "The retry is submitted automatically (the server validates balance), but always present the cost to the user.",
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -237,6 +247,11 @@ export async function startMcpServer(): Promise<void> {
               type: "number",
               description:
                 "Approximate repository size in MB (helps refine the estimate)",
+            },
+            use_case: {
+              type: "string",
+              description:
+                "Agent to use for the estimate (e.g. 'code_repo' for Cody, 'sera_code_repo' for SIERA). Defaults to code_repo.",
             },
           },
         },
@@ -307,10 +322,15 @@ export async function startMcpServer(): Promise<void> {
       {
         name: "list_supported_models",
         description:
-          "List the supported base HuggingFace models available for fine-tuning on Tuning Engines.",
+          "List the supported base HuggingFace models available for fine-tuning on Tuning Engines. Optionally filter by agent to see only compatible models.",
         inputSchema: {
           type: "object" as const,
-          properties: {},
+          properties: {
+            agent: {
+              type: "string",
+              description: "Filter models compatible with this agent (e.g. 'code_repo', 'sera_code_repo'). Omit to see all models.",
+            },
+          },
         },
       },
       {
@@ -372,6 +392,68 @@ export async function startMcpServer(): Promise<void> {
           required: ["model_id"],
         },
       },
+      {
+        name: "list_catalog_models",
+        description:
+          "List available pre-built models and datasets from the Tuning Engines Marketplace. " +
+          "These are platform-owned, ready-to-use assets that can be exported to your S3 bucket. " +
+          "Returns name, description, base model, size, export price, and category.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            category: {
+              type: "string",
+              description: "Filter by category (e.g. 'code', 'bug-fix', 'general'). Omit to see all.",
+            },
+          },
+        },
+      },
+      {
+        name: "get_catalog_model",
+        description:
+          "Get detailed information about a specific pre-built model or dataset from the Marketplace including description, pricing, and export options.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            model_id: { type: "string", description: "Catalog model ID (UUID)" },
+          },
+          required: ["model_id"],
+        },
+      },
+      {
+        name: "export_catalog_model",
+        description:
+          "Export a pre-built model or dataset from the Marketplace to your S3 bucket. " +
+          "Credits will be charged based on the export price upon successful completion.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            model_id: { type: "string", description: "Catalog model ID (UUID) to export" },
+            s3_bucket: { type: "string", description: "Destination S3 bucket name" },
+            s3_prefix: {
+              type: "string",
+              description: "Optional S3 key prefix for the exported model",
+            },
+            s3_access_key_id: { type: "string", description: "AWS access key ID" },
+            s3_secret_access_key: { type: "string", description: "AWS secret access key" },
+            s3_region: { type: "string", description: "AWS region (e.g. us-east-1)" },
+          },
+          required: ["model_id", "s3_bucket", "s3_access_key_id", "s3_secret_access_key", "s3_region"],
+        },
+      },
+      {
+        name: "catalog_export_status",
+        description:
+          "Check the status of a Marketplace export operation. Returns status, charge info, and any error messages.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            model_id: { type: "string", description: "Catalog model ID (UUID)" },
+            export_id: { type: "string", description: "Export operation ID (UUID)" },
+          },
+          required: ["model_id", "export_id"],
+        },
+      },
     ],
   }));
 
@@ -426,12 +508,31 @@ export async function startMcpServer(): Promise<void> {
           result = await getClient().getJobStatus(args!.job_id as string);
           break;
 
-        case "retry_job":
-          result = await getClient().retryJob(
-            args!.job_id as string,
+        case "retry_job": {
+          // Fetch job details and estimate before retrying so the AI can show cost
+          const retryJobId = args!.job_id as string;
+          const jobDetails = await getClient().getJob(retryJobId);
+          let retryEstimate: any = null;
+          try {
+            retryEstimate = await getClient().estimateJob({
+              base_model: jobDetails.base_model,
+              num_epochs: jobDetails.num_epochs,
+              max_examples: jobDetails.max_examples,
+              use_case: jobDetails.agent,
+            });
+          } catch (estErr: any) {
+            // Estimate failed — continue with retry (server validates balance)
+          }
+          const retryResult = await getClient().retryJob(
+            retryJobId,
             args?.github_token as string | undefined,
           );
+          result = {
+            ...retryResult,
+            retry_estimate: retryEstimate,
+          };
           break;
+        }
 
         case "estimate_job":
           if (!args?.base_model && !args?.base_user_model_id) {
@@ -446,6 +547,7 @@ export async function startMcpServer(): Promise<void> {
             num_epochs: args?.num_epochs as number | undefined,
             max_examples: args?.max_examples as number | undefined,
             repo_size_mb: args?.repo_size_mb as number | undefined,
+            use_case: args?.use_case as string | undefined,
           });
           break;
 
@@ -479,7 +581,7 @@ export async function startMcpServer(): Promise<void> {
           break;
 
         case "list_supported_models":
-          result = await getClient().listModels();
+          result = await getClient().listModels({ agent: args?.agent as string | undefined });
           break;
 
         case "import_model":
@@ -506,6 +608,33 @@ export async function startMcpServer(): Promise<void> {
 
         case "model_status":
           result = await getClient().getUserModelStatus(args!.model_id as string);
+          break;
+
+        case "list_catalog_models":
+          result = await getClient().listCatalogModels({
+            category: args?.category as string | undefined,
+          });
+          break;
+
+        case "get_catalog_model":
+          result = await getClient().getCatalogModel(args!.model_id as string);
+          break;
+
+        case "export_catalog_model":
+          result = await getClient().exportCatalogModel(args!.model_id as string, {
+            s3_bucket: args!.s3_bucket as string,
+            s3_prefix: args?.s3_prefix as string | undefined,
+            s3_access_key_id: args!.s3_access_key_id as string,
+            s3_secret_access_key: args!.s3_secret_access_key as string,
+            s3_region: args!.s3_region as string,
+          });
+          break;
+
+        case "catalog_export_status":
+          result = await getClient().getCatalogExportStatus(
+            args!.model_id as string,
+            args!.export_id as string
+          );
           break;
 
         default:

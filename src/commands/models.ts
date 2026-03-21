@@ -193,11 +193,12 @@ export function registerModelCommands(
   models
     .command("base")
     .description("List supported base models for fine-tuning")
+    .option("--agent <agent>", "Filter by agent (e.g. code_repo, sera_code_repo)")
     .option("--json", "Output as JSON")
     .action(async (opts) => {
       try {
         const client = getClient();
-        const result = await client.listModels();
+        const result = await client.listModels({ agent: opts.agent });
         const models = result.models || [];
 
         if (opts.json) {

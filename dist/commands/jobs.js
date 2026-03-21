@@ -256,13 +256,46 @@ function registerJobCommands(program, getClient) {
         .action(async (id, opts) => {
         try {
             const client = getClient();
+            // Fetch job details and estimate first
+            const jobDetails = await client.getJob(id);
+            let estimate = null;
+            try {
+                estimate = await client.estimateJob({
+                    base_model: jobDetails.base_model,
+                    num_epochs: jobDetails.num_epochs,
+                    max_examples: jobDetails.max_examples,
+                    use_case: jobDetails.agent,
+                });
+            }
+            catch {
+                // Estimate failed — continue (server validates balance)
+            }
+            // Show estimate
+            if (estimate && estimate.estimate) {
+                const est = estimate.estimate;
+                const bal = estimate.balance;
+                console.log("--- Cost Estimate ---");
+                console.log(`Estimated Cost: ${output.formatUsdAsCredits(Number(est.estimated_cost_usd))}`);
+                if (est.estimated_time_display) {
+                    console.log(`Estimated Time: ${est.estimated_time_display}`);
+                }
+                if (est.gpu_type) {
+                    console.log(`GPU: ${est.gpu_count || 1}x ${est.gpu_type}`);
+                }
+                console.log(`Balance: ${output.formatCents(bal.current_cents)} (required: ${output.formatCents(bal.required_cents)})`);
+                console.log(`Sufficient: ${bal.sufficient ? "Yes" : "No"}`);
+                console.log("---------------------");
+            }
             const job = await client.retryJob(id, opts.githubToken);
             if (opts.json) {
-                output.json(job);
+                output.json({ ...job, retry_estimate: estimate });
                 return;
             }
             console.log(`Retry job created: ${job.id}`);
             console.log(`Status: ${job.status}`);
+            if (estimate?.estimate?.estimated_cost_usd) {
+                console.log(`Accepted Estimate: ${output.formatUsdAsCredits(Number(estimate.estimate.estimated_cost_usd))}`);
+            }
         }
         catch (err) {
             console.error(err.message);

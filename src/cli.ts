@@ -9,12 +9,13 @@ import { registerModelCommands } from "./commands/models";
 import { registerBillingCommands } from "./commands/billing";
 import { registerAccountCommands } from "./commands/account";
 import { registerAuthCommands } from "./commands/auth";
+import { registerCatalogCommands } from "./commands/catalog";
 
 const program = new Command();
 
 program
   .name("te")
-  .description("Tuning Engines CLI — fine-tune LLMs from your terminal")
+  .description("Tuning Engines CLI — fine-tune LLMs and browse the Marketplace from your terminal")
   .version("0.3.5");
 
 // Lazy client initialization (only when a command actually needs it)
@@ -32,6 +33,7 @@ registerJobCommands(program, getClient);
 registerModelCommands(program, getClient);
 registerBillingCommands(program, getClient);
 registerAccountCommands(program, getClient);
+registerCatalogCommands(program, getClient);
 
 // MCP server subcommand
 program

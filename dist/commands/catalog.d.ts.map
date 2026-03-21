@@ -1,0 +1,1 @@
+{"version":3,"file":"catalog.d.ts","sourceRoot":"","sources":["../../src/commands/catalog.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,OAAO,EAAE,MAAM,WAAW,CAAC;AACpC,OAAO,EAAE,mBAAmB,EAAE,MAAM,WAAW,CAAC;AAGhD,wBAAgB,uBAAuB,CACrC,OAAO,EAAE,OAAO,EAChB,SAAS,EAAE,MAAM,mBAAmB,GACnC,IAAI,CAyIN"}

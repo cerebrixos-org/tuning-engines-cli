@@ -43,10 +43,11 @@ const models_1 = require("./commands/models");
 const billing_1 = require("./commands/billing");
 const account_1 = require("./commands/account");
 const auth_1 = require("./commands/auth");
+const catalog_1 = require("./commands/catalog");
 const program = new commander_1.Command();
 program
     .name("te")
-    .description("Tuning Engines CLI — fine-tune LLMs from your terminal")
+    .description("Tuning Engines CLI — fine-tune LLMs and browse the Marketplace from your terminal")
     .version("0.3.5");
 // Lazy client initialization (only when a command actually needs it)
 const getClient = () => {
@@ -62,6 +63,7 @@ const getClient = () => {
 (0, models_1.registerModelCommands)(program, getClient);
 (0, billing_1.registerBillingCommands)(program, getClient);
 (0, account_1.registerAccountCommands)(program, getClient);
+(0, catalog_1.registerCatalogCommands)(program, getClient);
 // MCP server subcommand
 program
     .command("mcp")

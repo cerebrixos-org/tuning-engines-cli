@@ -96,13 +96,36 @@ class TuningEnginesClient {
     async exportModel(modelId, params) {
         return this.request("POST", `/api/v1/user_models/${modelId}/export`, params);
     }
+    // --- Catalog (Marketplace) ---
+    async listCatalogModels(options) {
+        const params = new URLSearchParams();
+        if (options?.category)
+            params.set("category", options.category);
+        if (options?.limit)
+            params.set("limit", String(options.limit));
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/catalog${qs ? `?${qs}` : ""}`);
+    }
+    async getCatalogModel(modelId) {
+        return this.request("GET", `/api/v1/catalog/${modelId}`);
+    }
+    async exportCatalogModel(modelId, params) {
+        return this.request("POST", `/api/v1/catalog/${modelId}/export`, params);
+    }
+    async getCatalogExportStatus(modelId, exportId) {
+        return this.request("GET", `/api/v1/catalog/${modelId}/export/${exportId}/status`);
+    }
     // --- S3 Validation ---
     async validateS3(params) {
         return this.request("POST", "/api/v1/jobs/validate_s3", params);
     }
     // --- Supported Models ---
-    async listModels() {
-        return this.request("GET", "/api/v1/models");
+    async listModels(options) {
+        const params = new URLSearchParams();
+        if (options?.agent)
+            params.set("agent", options.agent);
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/models${qs ? `?${qs}` : ""}`);
     }
     // --- Billing ---
     async getBilling() {

@@ -1,6 +1,6 @@
 # Tuning Engines MCP Server
 
-Fine-tune large language models from your AI assistant using the Tuning Engines platform.
+Fine-tune large language models and browse the Marketplace of pre-built models and datasets from your AI assistant using the Tuning Engines platform.
 
 ## Setup
 
@@ -50,6 +50,10 @@ claude mcp add tuning-engines -- npx -y tuningengines-cli mcp serve
 | `show_model` | Get details of a specific model |
 | `delete_model` | Delete a model from cloud storage |
 | `get_balance` | Check account balance and recent transactions |
+| `list_catalog_models` | List pre-built models and datasets from the Marketplace |
+| `get_catalog_model` | Get details of a Marketplace item |
+| `export_catalog_model` | Export a Marketplace item to your S3 bucket |
+| `catalog_export_status` | Check the status of a Marketplace export |
 
 ## Examples
 
@@ -59,3 +63,5 @@ claude mcp add tuning-engines -- npx -y tuningengines-cli mcp serve
 - "What's the status of job abc-123?" -> calls `job_status`
 - "Show my account balance" -> calls `get_balance`
 - "List my trained models" -> calls `list_models`
+- "Show me the marketplace" -> calls `list_catalog_models`
+- "Export the Ruby specialist model to my S3" -> calls `export_catalog_model`

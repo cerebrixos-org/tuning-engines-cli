@@ -41,6 +41,7 @@ export declare class TuningEnginesClient {
         max_examples?: number;
         repo_size_mb?: number;
         base_user_model_id?: string;
+        use_case?: string;
     }): Promise<any>;
     listUserModels(): Promise<any>;
     getUserModel(modelId: string): Promise<any>;
@@ -62,13 +63,28 @@ export declare class TuningEnginesClient {
         s3_region: string;
         delete_after?: boolean;
     }): Promise<any>;
+    listCatalogModels(options?: {
+        category?: string;
+        limit?: number;
+    }): Promise<any>;
+    getCatalogModel(modelId: string): Promise<any>;
+    exportCatalogModel(modelId: string, params: {
+        s3_bucket: string;
+        s3_prefix?: string;
+        s3_access_key_id: string;
+        s3_secret_access_key: string;
+        s3_region: string;
+    }): Promise<any>;
+    getCatalogExportStatus(modelId: string, exportId: string): Promise<any>;
     validateS3(params: {
         s3_bucket: string;
         s3_access_key_id: string;
         s3_secret_access_key: string;
         s3_region: string;
     }): Promise<any>;
-    listModels(): Promise<any>;
+    listModels(options?: {
+        agent?: string;
+    }): Promise<any>;
     getBilling(): Promise<any>;
     getAccount(): Promise<any>;
     static createDeviceSession(apiUrl: string): Promise<{
