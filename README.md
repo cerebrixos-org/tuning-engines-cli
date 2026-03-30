@@ -91,6 +91,10 @@ te jobs status <job-id> --watch
 te models list
 ```
 
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/cerebrixos-org-tuning-engines-cli).
+
 ## MCP Server Setup
 
 The CLI includes a built-in MCP server with 18 tools. Any AI assistant that supports MCP can fine-tune models, manage training jobs, and check billing through natural language.
