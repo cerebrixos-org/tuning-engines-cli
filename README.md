@@ -93,7 +93,7 @@ te models list
 
 ## MCP Server Setup
 
-The CLI includes a built-in MCP server with 18 tools. Any AI assistant that supports MCP can fine-tune models, manage training jobs, and check billing through natural language.
+The CLI includes a built-in MCP server with 35+ tools. Any AI assistant that supports MCP can fine-tune models, manage training jobs, run evaluations, check inference usage, and manage datasets through natural language.
 
 ### Claude Desktop
 
@@ -187,6 +187,43 @@ The `create_job` tool description includes full agent details and model lists, s
 | `te models delete <id>` | Delete a model |
 | `te models status <id>` | Check import/export status |
 
+### Datasets
+
+| Command | Description |
+|---------|-------------|
+| `te datasets list` | List all datasets |
+| `te datasets show <id>` | Show dataset details |
+| `te datasets create` | Create a dataset from S3 (`--name`, `--s3-url`, `--for-evaluation`) |
+| `te datasets delete <id>` | Delete a dataset |
+| `te datasets status <id>` | Check import/processing status |
+
+### Evaluations
+
+| Command | Description |
+|---------|-------------|
+| `te evals list` | List all evaluations |
+| `te evals show <id>` | Show evaluation details and scores |
+| `te evals create` | Run an evaluation (`--model`, `--dataset`, `--evaluators`) |
+| `te evals cancel <id>` | Cancel a running evaluation |
+| `te evals status <id>` | Live evaluation progress |
+| `te evals evaluators` | List available evaluators |
+| `te evals estimate` | Cost estimate for an evaluation |
+
+### Inference
+
+| Command | Description |
+|---------|-------------|
+| `te inference models` | List available inference models |
+| `te inference usage` | Show inference API usage stats |
+| `te inference jwt` | Get a JWT for direct API access |
+
+### Agents
+
+| Command | Description |
+|---------|-------------|
+| `te agents list` | List available agents |
+| `te agents show <id>` | Show agent details and capabilities |
+
 ### Billing & Account
 
 | Command | Description |
@@ -207,6 +244,8 @@ All commands support `--json` for machine-readable output.
 
 ## MCP Tools Reference
 
+### Training Jobs
+
 | Tool | Description |
 |------|-------------|
 | `create_job` | Fine-tune an LLM on a GitHub repo. Supports agent selection (Cody, SIERA), quality tier, base model, epochs, S3 export. |
@@ -217,6 +256,11 @@ All commands support `--json` for machine-readable output.
 | `cancel_job` | Cancel a running/queued job |
 | `retry_job` | Retry a failed job from its last checkpoint |
 | `validate_s3` | Test S3 credentials before submitting a job |
+
+### Models
+
+| Tool | Description |
+|------|-------------|
 | `list_models` | List trained and imported models |
 | `show_model` | Model details (status, size, base model, training job) |
 | `delete_model` | Delete a model from cloud storage |
@@ -224,6 +268,57 @@ All commands support `--json` for machine-readable output.
 | `export_model` | Export a model to S3 |
 | `model_status` | Import/export progress |
 | `list_supported_models` | Available base models with GPU hours per epoch |
+
+### Marketplace
+
+| Tool | Description |
+|------|-------------|
+| `list_catalog_models` | Browse pre-built models and datasets |
+| `get_catalog_model` | Details of a marketplace item |
+| `export_catalog_model` | Export marketplace item to S3 |
+| `catalog_export_status` | Check marketplace export progress |
+
+### Datasets
+
+| Tool | Description |
+|------|-------------|
+| `list_datasets` | List datasets for training and evaluation |
+| `show_dataset` | Dataset details and status |
+| `create_dataset` | Create a dataset from S3 |
+| `delete_dataset` | Delete a dataset |
+| `dataset_status` | Check dataset import/processing status |
+
+### Evaluations
+
+| Tool | Description |
+|------|-------------|
+| `list_evaluations` | List model evaluations |
+| `show_evaluation` | Evaluation details, scores, and metrics |
+| `create_evaluation` | Run an evaluation against a dataset |
+| `cancel_evaluation` | Cancel a running evaluation |
+| `evaluation_status` | Live evaluation progress |
+| `list_evaluators` | Available evaluators (code_execution, similarity, llm_judge, etc.) |
+| `estimate_evaluation` | Cost estimate for an evaluation |
+
+### Inference
+
+| Tool | Description |
+|------|-------------|
+| `list_inference_models` | Models available for inference |
+| `inference_usage` | Inference API usage statistics |
+| `get_inference_jwt` | Get JWT token for direct API access |
+
+### Agents
+
+| Tool | Description |
+|------|-------------|
+| `list_agents` | List available agents |
+| `show_agent` | Agent details and capabilities |
+
+### Account
+
+| Tool | Description |
+|------|-------------|
 | `get_balance` | Account balance and recent transactions |
 | `get_account` | Account details |
 

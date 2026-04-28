@@ -454,6 +454,237 @@ export async function startMcpServer(): Promise<void> {
           required: ["model_id", "export_id"],
         },
       },
+      // --- Datasets ---
+      {
+        name: "list_datasets",
+        description:
+          "List datasets available for training and evaluation. Datasets can be uploaded from S3 and used for fine-tuning or model evaluation.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            limit: { type: "number", description: "Max results (default 20)" },
+          },
+        },
+      },
+      {
+        name: "show_dataset",
+        description: "Get details of a specific dataset including status, source, and metadata.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            dataset_id: { type: "string", description: "Dataset ID (UUID)" },
+          },
+          required: ["dataset_id"],
+        },
+      },
+      {
+        name: "create_dataset",
+        description:
+          "Create a new dataset by importing from S3. Datasets can be used for fine-tuning or model evaluation.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            name: { type: "string", description: "Name for the dataset" },
+            description: { type: "string", description: "Description of the dataset contents" },
+            source_type: { type: "string", description: "Source type (e.g. 's3')" },
+            s3_url: { type: "string", description: "S3 URL of the dataset (e.g. s3://bucket/path/data.jsonl)" },
+            s3_access_key_id: { type: "string", description: "AWS access key ID" },
+            s3_secret_access_key: { type: "string", description: "AWS secret access key" },
+            s3_region: { type: "string", description: "AWS region (e.g. us-east-1)" },
+            for_evaluation: { type: "boolean", description: "Whether this dataset is for evaluation (default: false)" },
+          },
+          required: ["name", "source_type"],
+        },
+      },
+      {
+        name: "delete_dataset",
+        description: "Delete a dataset from the platform.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            dataset_id: { type: "string", description: "Dataset ID to delete" },
+          },
+          required: ["dataset_id"],
+        },
+      },
+      {
+        name: "dataset_status",
+        description: "Check the status of a dataset import or processing operation.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            dataset_id: { type: "string", description: "Dataset ID (UUID)" },
+          },
+          required: ["dataset_id"],
+        },
+      },
+      // --- Evaluations ---
+      {
+        name: "list_evaluations",
+        description:
+          "List model evaluations. Evaluations run your trained models against benchmark datasets using various evaluators to measure quality.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            status: {
+              type: "string",
+              description: "Filter by status: queued, running, succeeded, failed, canceled",
+            },
+            limit: { type: "number", description: "Max results (default 20)" },
+          },
+        },
+      },
+      {
+        name: "show_evaluation",
+        description:
+          "Get full details of a specific evaluation including status, scores, metrics, and comparison data.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            evaluation_id: { type: "string", description: "Evaluation ID (UUID)" },
+          },
+          required: ["evaluation_id"],
+        },
+      },
+      {
+        name: "create_evaluation",
+        description:
+          "Create a new model evaluation. Run your trained model or a base model against a dataset using selected evaluators. " +
+          "Use list_evaluators to see available evaluators (e.g. code_execution, similarity, llm_judge).",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            name: { type: "string", description: "Name for this evaluation run" },
+            user_model_id: {
+              type: "string",
+              description: "ID of your trained model to evaluate. Either this or base_model is required.",
+            },
+            base_model: {
+              type: "string",
+              description: "HuggingFace model ID to evaluate (e.g. 'Qwen/Qwen2.5-Coder-7B-Instruct'). Either this or user_model_id is required.",
+            },
+            dataset_id: {
+              type: "string",
+              description: "ID of the evaluation dataset to use. Must be a dataset marked for_evaluation.",
+            },
+            evaluator_ids: {
+              type: "array",
+              items: { type: "string" },
+              description: "List of evaluator IDs to run (use list_evaluators to see options)",
+            },
+            max_samples: {
+              type: "number",
+              description: "Maximum samples to evaluate (default: all)",
+            },
+          },
+          required: ["dataset_id", "evaluator_ids"],
+        },
+      },
+      {
+        name: "cancel_evaluation",
+        description: "Cancel a running or queued evaluation.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            evaluation_id: { type: "string", description: "Evaluation ID to cancel" },
+          },
+          required: ["evaluation_id"],
+        },
+      },
+      {
+        name: "evaluation_status",
+        description: "Get live status of an evaluation including progress and current metrics.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            evaluation_id: { type: "string", description: "Evaluation ID (UUID)" },
+          },
+          required: ["evaluation_id"],
+        },
+      },
+      {
+        name: "list_evaluators",
+        description:
+          "List available evaluators for model evaluation. Evaluators measure different aspects of model quality like code execution, similarity, or LLM-based judgment.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {},
+        },
+      },
+      {
+        name: "estimate_evaluation",
+        description: "Get a cost estimate for an evaluation before running it.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            user_model_id: { type: "string", description: "ID of your trained model" },
+            base_model: { type: "string", description: "Or a HuggingFace model ID" },
+            dataset_id: { type: "string", description: "Evaluation dataset ID" },
+            evaluator_ids: {
+              type: "array",
+              items: { type: "string" },
+              description: "List of evaluator IDs",
+            },
+            max_samples: { type: "number", description: "Max samples to evaluate" },
+          },
+          required: ["dataset_id", "evaluator_ids"],
+        },
+      },
+      // --- Inference ---
+      {
+        name: "list_inference_models",
+        description:
+          "List models available for inference through the Tuning Engines inference API. " +
+          "Includes both platform models and your deployed trained models.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {},
+        },
+      },
+      {
+        name: "inference_usage",
+        description:
+          "Get inference API usage statistics including request counts, token usage, and costs.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            start_date: { type: "string", description: "Start date (YYYY-MM-DD)" },
+            end_date: { type: "string", description: "End date (YYYY-MM-DD)" },
+            model: { type: "string", description: "Filter by model name" },
+          },
+        },
+      },
+      {
+        name: "get_inference_jwt",
+        description:
+          "Get a JWT token for authenticating with the Tuning Engines inference API. " +
+          "Use this to make direct API calls to the inference endpoint.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {},
+        },
+      },
+      // --- Agents ---
+      {
+        name: "list_agents",
+        description:
+          "List available agents configured for your organization. Agents are AI assistants with specific capabilities and tool access.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {},
+        },
+      },
+      {
+        name: "show_agent",
+        description: "Get details of a specific agent including capabilities, tools, and configuration.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            agent_id: { type: "string", description: "Agent ID" },
+          },
+          required: ["agent_id"],
+        },
+      },
     ],
   }));
 
@@ -635,6 +866,115 @@ export async function startMcpServer(): Promise<void> {
             args!.model_id as string,
             args!.export_id as string
           );
+          break;
+
+        // --- Datasets ---
+        case "list_datasets":
+          result = await getClient().listDatasets({
+            limit: args?.limit as number | undefined,
+          });
+          break;
+
+        case "show_dataset":
+          result = await getClient().getDataset(args!.dataset_id as string);
+          break;
+
+        case "create_dataset":
+          result = await getClient().createDataset({
+            name: args!.name as string,
+            description: args?.description as string | undefined,
+            source_type: args!.source_type as string,
+            s3_url: args?.s3_url as string | undefined,
+            s3_access_key_id: args?.s3_access_key_id as string | undefined,
+            s3_secret_access_key: args?.s3_secret_access_key as string | undefined,
+            s3_region: args?.s3_region as string | undefined,
+            for_evaluation: args?.for_evaluation as boolean | undefined,
+          });
+          break;
+
+        case "delete_dataset":
+          result = await getClient().deleteDataset(args!.dataset_id as string);
+          break;
+
+        case "dataset_status":
+          result = await getClient().getDatasetStatus(args!.dataset_id as string);
+          break;
+
+        // --- Evaluations ---
+        case "list_evaluations":
+          result = await getClient().listEvaluations({
+            status: args?.status as string | undefined,
+            limit: args?.limit as number | undefined,
+          });
+          break;
+
+        case "show_evaluation":
+          result = await getClient().getEvaluation(args!.evaluation_id as string);
+          break;
+
+        case "create_evaluation":
+          if (!args?.user_model_id && !args?.base_model) {
+            return {
+              content: [{ type: "text", text: "Error: either user_model_id or base_model is required" }],
+              isError: true,
+            };
+          }
+          result = await getClient().createEvaluation({
+            name: args?.name as string | undefined,
+            user_model_id: args?.user_model_id as string | undefined,
+            base_model: args?.base_model as string | undefined,
+            dataset_id: args!.dataset_id as string,
+            evaluator_ids: args!.evaluator_ids as string[],
+            max_samples: args?.max_samples as number | undefined,
+          });
+          break;
+
+        case "cancel_evaluation":
+          result = await getClient().cancelEvaluation(args!.evaluation_id as string);
+          break;
+
+        case "evaluation_status":
+          result = await getClient().getEvaluationStatus(args!.evaluation_id as string);
+          break;
+
+        case "list_evaluators":
+          result = await getClient().listEvaluators();
+          break;
+
+        case "estimate_evaluation":
+          result = await getClient().estimateEvaluation({
+            user_model_id: args?.user_model_id as string | undefined,
+            base_model: args?.base_model as string | undefined,
+            dataset_id: args!.dataset_id as string,
+            evaluator_ids: args!.evaluator_ids as string[],
+            max_samples: args?.max_samples as number | undefined,
+          });
+          break;
+
+        // --- Inference ---
+        case "list_inference_models":
+          result = await getClient().listInferenceModels();
+          break;
+
+        case "inference_usage":
+          result = await getClient().getInferenceUsage({
+            start_date: args?.start_date as string | undefined,
+            end_date: args?.end_date as string | undefined,
+            model: args?.model as string | undefined,
+          });
+          break;
+
+        case "get_inference_jwt":
+          result = await getClient().getInferenceJwt();
+          break;
+
+        // --- Agents ---
+        case "list_agents":
+          result = await getClient().listAgents();
+          break;
+
+        case "show_agent":
+          result = await getClient().getAgent(args!.agent_id as string);
           break;
 
         default:

@@ -87,6 +87,67 @@ export declare class TuningEnginesClient {
     }): Promise<any>;
     getBilling(): Promise<any>;
     getAccount(): Promise<any>;
+    listDatasets(options?: {
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getDataset(datasetId: string): Promise<any>;
+    createDataset(params: {
+        name: string;
+        description?: string;
+        source_type: string;
+        s3_url?: string;
+        s3_access_key_id?: string;
+        s3_secret_access_key?: string;
+        s3_region?: string;
+        for_evaluation?: boolean;
+    }): Promise<any>;
+    updateDataset(datasetId: string, params: {
+        name?: string;
+        description?: string;
+    }): Promise<any>;
+    deleteDataset(datasetId: string): Promise<any>;
+    getDatasetStatus(datasetId: string): Promise<any>;
+    validateDatasetS3(params: {
+        s3_url: string;
+        s3_access_key_id: string;
+        s3_secret_access_key: string;
+        s3_region: string;
+    }): Promise<any>;
+    listEvaluations(options?: {
+        status?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getEvaluation(evaluationId: string): Promise<any>;
+    createEvaluation(params: {
+        name?: string;
+        user_model_id?: string;
+        base_model?: string;
+        dataset_id: string;
+        evaluator_ids: string[];
+        max_samples?: number;
+    }): Promise<any>;
+    cancelEvaluation(evaluationId: string): Promise<any>;
+    retryEvaluation(evaluationId: string): Promise<any>;
+    getEvaluationStatus(evaluationId: string): Promise<any>;
+    listEvaluators(): Promise<any>;
+    estimateEvaluation(params: {
+        user_model_id?: string;
+        base_model?: string;
+        dataset_id: string;
+        evaluator_ids: string[];
+        max_samples?: number;
+    }): Promise<any>;
+    listInferenceModels(): Promise<any>;
+    getInferenceUsage(options?: {
+        start_date?: string;
+        end_date?: string;
+        model?: string;
+    }): Promise<any>;
+    getInferenceJwt(): Promise<any>;
+    listAgents(): Promise<any>;
+    getAgent(agentId: string): Promise<any>;
     static createDeviceSession(apiUrl: string): Promise<{
         device_code: string;
         verification_url: string;

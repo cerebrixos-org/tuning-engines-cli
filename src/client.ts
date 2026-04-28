@@ -201,6 +201,152 @@ export class TuningEnginesClient {
     return this.request("GET", "/api/v1/account");
   }
 
+  // --- Datasets ---
+
+  async listDatasets(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/datasets${qs ? `?${qs}` : ""}`);
+  }
+
+  async getDataset(datasetId: string): Promise<any> {
+    return this.request("GET", `/api/v1/datasets/${datasetId}`);
+  }
+
+  async createDataset(params: {
+    name: string;
+    description?: string;
+    source_type: string;
+    s3_url?: string;
+    s3_access_key_id?: string;
+    s3_secret_access_key?: string;
+    s3_region?: string;
+    for_evaluation?: boolean;
+  }): Promise<any> {
+    return this.request("POST", "/api/v1/datasets", params);
+  }
+
+  async updateDataset(
+    datasetId: string,
+    params: {
+      name?: string;
+      description?: string;
+    }
+  ): Promise<any> {
+    return this.request("PATCH", `/api/v1/datasets/${datasetId}`, params);
+  }
+
+  async deleteDataset(datasetId: string): Promise<any> {
+    return this.request("DELETE", `/api/v1/datasets/${datasetId}`);
+  }
+
+  async getDatasetStatus(datasetId: string): Promise<any> {
+    return this.request("GET", `/api/v1/datasets/${datasetId}/status`);
+  }
+
+  async validateDatasetS3(params: {
+    s3_url: string;
+    s3_access_key_id: string;
+    s3_secret_access_key: string;
+    s3_region: string;
+  }): Promise<any> {
+    return this.request("POST", "/api/v1/datasets/validate_s3", params);
+  }
+
+  // --- Evaluations ---
+
+  async listEvaluations(options?: {
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.status) params.set("status", options.status);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/evaluations${qs ? `?${qs}` : ""}`);
+  }
+
+  async getEvaluation(evaluationId: string): Promise<any> {
+    return this.request("GET", `/api/v1/evaluations/${evaluationId}`);
+  }
+
+  async createEvaluation(params: {
+    name?: string;
+    user_model_id?: string;
+    base_model?: string;
+    dataset_id: string;
+    evaluator_ids: string[];
+    max_samples?: number;
+  }): Promise<any> {
+    return this.request("POST", "/api/v1/evaluations", params);
+  }
+
+  async cancelEvaluation(evaluationId: string): Promise<any> {
+    return this.request("POST", `/api/v1/evaluations/${evaluationId}/cancel`);
+  }
+
+  async retryEvaluation(evaluationId: string): Promise<any> {
+    return this.request("POST", `/api/v1/evaluations/${evaluationId}/retry`);
+  }
+
+  async getEvaluationStatus(evaluationId: string): Promise<any> {
+    return this.request("GET", `/api/v1/evaluations/${evaluationId}/status`);
+  }
+
+  async listEvaluators(): Promise<any> {
+    return this.request("GET", "/api/v1/evaluations/evaluators");
+  }
+
+  async estimateEvaluation(params: {
+    user_model_id?: string;
+    base_model?: string;
+    dataset_id: string;
+    evaluator_ids: string[];
+    max_samples?: number;
+  }): Promise<any> {
+    return this.request("POST", "/api/v1/evaluations/estimate", params);
+  }
+
+  // --- Inference ---
+
+  async listInferenceModels(): Promise<any> {
+    return this.request("GET", "/api/v1/inference/models");
+  }
+
+  async getInferenceUsage(options?: {
+    start_date?: string;
+    end_date?: string;
+    model?: string;
+  }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.start_date) params.set("start_date", options.start_date);
+    if (options?.end_date) params.set("end_date", options.end_date);
+    if (options?.model) params.set("model", options.model);
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/inference/usage${qs ? `?${qs}` : ""}`);
+  }
+
+  async getInferenceJwt(): Promise<any> {
+    return this.request("POST", "/api/v1/inference/jwt");
+  }
+
+  // --- Agents ---
+
+  async listAgents(): Promise<any> {
+    return this.request("GET", "/api/v1/agents");
+  }
+
+  async getAgent(agentId: string): Promise<any> {
+    return this.request("GET", `/api/v1/agents/${agentId}`);
+  }
+
   // --- Device Auth (unauthenticated) ---
 
   static async createDeviceSession(

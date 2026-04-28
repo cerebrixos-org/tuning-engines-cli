@@ -135,6 +135,92 @@ class TuningEnginesClient {
     async getAccount() {
         return this.request("GET", "/api/v1/account");
     }
+    // --- Datasets ---
+    async listDatasets(options) {
+        const params = new URLSearchParams();
+        if (options?.limit)
+            params.set("limit", String(options.limit));
+        if (options?.offset)
+            params.set("offset", String(options.offset));
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/datasets${qs ? `?${qs}` : ""}`);
+    }
+    async getDataset(datasetId) {
+        return this.request("GET", `/api/v1/datasets/${datasetId}`);
+    }
+    async createDataset(params) {
+        return this.request("POST", "/api/v1/datasets", params);
+    }
+    async updateDataset(datasetId, params) {
+        return this.request("PATCH", `/api/v1/datasets/${datasetId}`, params);
+    }
+    async deleteDataset(datasetId) {
+        return this.request("DELETE", `/api/v1/datasets/${datasetId}`);
+    }
+    async getDatasetStatus(datasetId) {
+        return this.request("GET", `/api/v1/datasets/${datasetId}/status`);
+    }
+    async validateDatasetS3(params) {
+        return this.request("POST", "/api/v1/datasets/validate_s3", params);
+    }
+    // --- Evaluations ---
+    async listEvaluations(options) {
+        const params = new URLSearchParams();
+        if (options?.status)
+            params.set("status", options.status);
+        if (options?.limit)
+            params.set("limit", String(options.limit));
+        if (options?.offset)
+            params.set("offset", String(options.offset));
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/evaluations${qs ? `?${qs}` : ""}`);
+    }
+    async getEvaluation(evaluationId) {
+        return this.request("GET", `/api/v1/evaluations/${evaluationId}`);
+    }
+    async createEvaluation(params) {
+        return this.request("POST", "/api/v1/evaluations", params);
+    }
+    async cancelEvaluation(evaluationId) {
+        return this.request("POST", `/api/v1/evaluations/${evaluationId}/cancel`);
+    }
+    async retryEvaluation(evaluationId) {
+        return this.request("POST", `/api/v1/evaluations/${evaluationId}/retry`);
+    }
+    async getEvaluationStatus(evaluationId) {
+        return this.request("GET", `/api/v1/evaluations/${evaluationId}/status`);
+    }
+    async listEvaluators() {
+        return this.request("GET", "/api/v1/evaluations/evaluators");
+    }
+    async estimateEvaluation(params) {
+        return this.request("POST", "/api/v1/evaluations/estimate", params);
+    }
+    // --- Inference ---
+    async listInferenceModels() {
+        return this.request("GET", "/api/v1/inference/models");
+    }
+    async getInferenceUsage(options) {
+        const params = new URLSearchParams();
+        if (options?.start_date)
+            params.set("start_date", options.start_date);
+        if (options?.end_date)
+            params.set("end_date", options.end_date);
+        if (options?.model)
+            params.set("model", options.model);
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/inference/usage${qs ? `?${qs}` : ""}`);
+    }
+    async getInferenceJwt() {
+        return this.request("POST", "/api/v1/inference/jwt");
+    }
+    // --- Agents ---
+    async listAgents() {
+        return this.request("GET", "/api/v1/agents");
+    }
+    async getAgent(agentId) {
+        return this.request("GET", `/api/v1/agents/${agentId}`);
+    }
     // --- Device Auth (unauthenticated) ---
     static async createDeviceSession(apiUrl) {
         return TuningEnginesClient.requestNoAuth(apiUrl, "POST", "/api/v1/auth/device");
