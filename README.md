@@ -152,6 +152,66 @@ When connected, your AI assistant can:
 
 The `create_job` tool description includes full agent details and model lists, so AI assistants automatically select the right agent and model based on what you ask for.
 
+## Agent Runtime SDK: LangGraph and Temporal
+
+Use the CLI/MCP package when you want `npx` tools for assistants. Use the
+Python SDK when you want your own app to run durable agent workflows while
+Tuning Engines remains the governed control plane for models, agents, skills,
+MCP tools, RBAC, AGT policy, audit, usage, and token economics.
+
+Install directly from this repo:
+
+```bash
+pip install "tuning-agents[langgraph] @ git+https://github.com/cerebrixos-org/tuning-engines-cli.git#subdirectory=packages/tuning-agents"
+pip install "tuning-agents[temporal] @ git+https://github.com/cerebrixos-org/tuning-engines-cli.git#subdirectory=packages/tuning-agents"
+```
+
+LangGraph example:
+
+```python
+from langgraph.checkpoint.memory import InMemorySaver
+
+from tuning_agents import TuningClient
+from tuning_agents.langgraph import create_tuning_langgraph_agent, invoke_with_trace
+
+client = TuningClient(api_key="te_your_key_here")
+
+agent = create_tuning_langgraph_agent(
+    client,
+    model="llama-3.3-70b-fp8",
+    agent_names=["billing-escalation"],
+    checkpointer=InMemorySaver(),
+    interrupt_before=["tools"],
+)
+
+result = invoke_with_trace(
+    client,
+    agent,
+    [{"role": "user", "content": "Triage this ticket and escalate if needed."}],
+    thread_id="ticket-123",
+)
+
+client.flush_trace(name="ticket-triage", runtime="langgraph", status="succeeded")
+```
+
+Temporal example:
+
+```python
+from tuning_agents.temporal import (
+    agent_message_activity,
+    chat_completion_activity,
+    define_temporal_workflow,
+    mcp_tool_activity,
+)
+
+TuningAgentWorkflow = define_temporal_workflow()
+# Register TuningAgentWorkflow plus the three activities in your Temporal worker.
+```
+
+The SDK captures runtime events from LangGraph/Temporal and posts them to
+`POST /api/v1/traces`. The Rails app pairs that with existing inference usage,
+request capture, policy, audit, and billing logs.
+
 ## CLI Commands
 
 ### Authentication

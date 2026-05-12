@@ -1,7 +1,7 @@
 {
   "name": "tuningengines-cli",
-  "version": "0.4.0",
-  "description": "Fine-tune and train open-source LLMs and SLMs with zero infrastructure, plus a Marketplace of pre-built fine-tuned models and datasets. Tuning Engines CLI and MCP server for domain-specific model training — own your sovereign AI model, fine-tuned on your data via specialized tuning agents. Supports Qwen, Llama, DeepSeek, Mistral, Gemma, Phi, StarCoder, CodeLlama from 1B to 72B parameters. LoRA, QLoRA, full fine-tuning. Cost estimation, model management, S3 import/export, Marketplace catalog browsing and export. NEW: Datasets, Evaluations, Inference API, and Agents. 35+ MCP tools for Claude Desktop, Claude Code, Cursor, Windsurf, and any MCP-compatible AI assistant.",
+  "version": "0.4.1",
+  "description": "Tuning Engines CLI, MCP server, and Python agent runtime adapters for governed model, agent, skill, and MCP workflows. Fine-tune open-source LLMs, run inference, manage datasets/evaluations, and connect LangGraph or Temporal while Tuning Engines handles policy, audit, usage, and token economics.",
   "main": "dist/cli.js",
   "bin": {
     "te": "dist/cli.js"
@@ -24,6 +24,7 @@
   },
   "files": [
     "dist",
+    "packages/tuning-agents",
     "README.md"
   ],
   "license": "MIT",
