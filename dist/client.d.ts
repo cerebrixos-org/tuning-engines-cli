@@ -148,6 +148,29 @@ export declare class TuningEnginesClient {
     getInferenceJwt(): Promise<any>;
     listAgents(): Promise<any>;
     getAgent(agentId: string): Promise<any>;
+    listTenantResource(resource: string, options?: {
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getTenantResource(resource: string, id: string): Promise<any>;
+    createTenantResource(resource: string, params: Record<string, any>): Promise<any>;
+    updateTenantResource(resource: string, id: string, params: Record<string, any>): Promise<any>;
+    deleteTenantResource(resource: string, id: string): Promise<any>;
+    testGovernancePolicy(id: string, context: Record<string, any>): Promise<any>;
+    getTenantTeam(): Promise<any>;
+    inviteTenantMember(params: {
+        email: string;
+        role?: string | number;
+    }): Promise<any>;
+    updateTenantMember(id: string, params: {
+        inference_role_id?: string | null;
+    }): Promise<any>;
+    deleteTenantMember(id: string): Promise<any>;
+    setTenantMemberEnabled(id: string, enabled: boolean): Promise<any>;
+    cancelTenantInvitation(id: string): Promise<any>;
+    updateTenantDomains(domains: string[]): Promise<any>;
+    getInferenceCaptureConfig(): Promise<any>;
+    updateInferenceCaptureConfig(params: Record<string, any>): Promise<any>;
     static createDeviceSession(apiUrl: string): Promise<{
         device_code: string;
         verification_url: string;

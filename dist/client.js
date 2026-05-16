@@ -221,6 +221,58 @@ class TuningEnginesClient {
     async getAgent(agentId) {
         return this.request("GET", `/api/v1/agents/${agentId}`);
     }
+    // --- Tenant admin automation resources ---
+    async listTenantResource(resource, options) {
+        const params = new URLSearchParams();
+        if (options?.limit)
+            params.set("limit", String(options.limit));
+        if (options?.offset)
+            params.set("offset", String(options.offset));
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/tenant/${encodeURIComponent(resource)}${qs ? `?${qs}` : ""}`);
+    }
+    async getTenantResource(resource, id) {
+        return this.request("GET", `/api/v1/tenant/${encodeURIComponent(resource)}/${encodeURIComponent(id)}`);
+    }
+    async createTenantResource(resource, params) {
+        return this.request("POST", `/api/v1/tenant/${encodeURIComponent(resource)}`, params);
+    }
+    async updateTenantResource(resource, id, params) {
+        return this.request("PATCH", `/api/v1/tenant/${encodeURIComponent(resource)}/${encodeURIComponent(id)}`, params);
+    }
+    async deleteTenantResource(resource, id) {
+        return this.request("DELETE", `/api/v1/tenant/${encodeURIComponent(resource)}/${encodeURIComponent(id)}`);
+    }
+    async testGovernancePolicy(id, context) {
+        return this.request("POST", `/api/v1/tenant/governance_policies/${encodeURIComponent(id)}/test`, { context });
+    }
+    async getTenantTeam() {
+        return this.request("GET", "/api/v1/tenant/team");
+    }
+    async inviteTenantMember(params) {
+        return this.request("POST", "/api/v1/tenant/team/invitations", params);
+    }
+    async updateTenantMember(id, params) {
+        return this.request("PATCH", `/api/v1/tenant/team/members/${encodeURIComponent(id)}`, params);
+    }
+    async deleteTenantMember(id) {
+        return this.request("DELETE", `/api/v1/tenant/team/members/${encodeURIComponent(id)}`);
+    }
+    async setTenantMemberEnabled(id, enabled) {
+        return this.request("POST", `/api/v1/tenant/team/members/${encodeURIComponent(id)}/${enabled ? "enable" : "disable"}`);
+    }
+    async cancelTenantInvitation(id) {
+        return this.request("DELETE", `/api/v1/tenant/team/invitations/${encodeURIComponent(id)}`);
+    }
+    async updateTenantDomains(domains) {
+        return this.request("PATCH", "/api/v1/tenant/team/domains", { allowed_email_domains: domains });
+    }
+    async getInferenceCaptureConfig() {
+        return this.request("GET", "/api/v1/tenant/inference_capture");
+    }
+    async updateInferenceCaptureConfig(params) {
+        return this.request("PATCH", "/api/v1/tenant/inference_capture", params);
+    }
     // --- Device Auth (unauthenticated) ---
     static async createDeviceSession(apiUrl) {
         return TuningEnginesClient.requestNoAuth(apiUrl, "POST", "/api/v1/auth/device");
