@@ -44,11 +44,16 @@ const billing_1 = require("./commands/billing");
 const account_1 = require("./commands/account");
 const auth_1 = require("./commands/auth");
 const catalog_1 = require("./commands/catalog");
+const datasets_1 = require("./commands/datasets");
+const evaluations_1 = require("./commands/evaluations");
+const inference_1 = require("./commands/inference");
+const agents_1 = require("./commands/agents");
+const tenant_1 = require("./commands/tenant");
 const program = new commander_1.Command();
 program
     .name("te")
     .description("Tuning Engines CLI — fine-tune LLMs and browse the Marketplace from your terminal")
-    .version("0.3.5");
+    .version("0.4.2");
 // Lazy client initialization (only when a command actually needs it)
 const getClient = () => {
     return new client_1.TuningEnginesClient({
@@ -64,6 +69,11 @@ const getClient = () => {
 (0, billing_1.registerBillingCommands)(program, getClient);
 (0, account_1.registerAccountCommands)(program, getClient);
 (0, catalog_1.registerCatalogCommands)(program, getClient);
+(0, datasets_1.registerDatasetCommands)(program, getClient);
+(0, evaluations_1.registerEvaluationCommands)(program, getClient);
+(0, inference_1.registerInferenceCommands)(program, getClient);
+(0, agents_1.registerAgentCommands)(program, getClient);
+(0, tenant_1.registerTenantCommands)(program, getClient);
 // MCP server subcommand
 program
     .command("mcp")

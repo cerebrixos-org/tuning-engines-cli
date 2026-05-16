@@ -69,6 +69,9 @@ te jobs create --agent sera_code_repo \
 ```bash
 npm install -g tuningengines-cli
 
+# Or run without installing after the next npm release is published
+npx -y tuningengines-cli auth status
+
 # Sign up or log in (opens browser — works for new accounts too)
 te auth login
 
@@ -283,6 +286,33 @@ request capture, policy, audit, and billing logs.
 |---------|-------------|
 | `te agents list` | List available agents |
 | `te agents show <id>` | Show agent details and capabilities |
+
+### Tenant Admin Automation
+
+These commands require an API token for a tenant owner or tenant admin. They are
+designed for CI smoke tests and end-to-end product checks. Secret fields can be
+sent on create/update where the server supports them, but responses never print
+stored provider keys, AWS secrets, or invitation tokens.
+
+| Command | Description |
+|---------|-------------|
+| `te tenant resources` | List supported tenant resource names |
+| `te tenant list <resource>` | List resources such as `inference_keys`, `inference_roles`, `model_deployments`, `routing_profiles`, `guardrail_policies`, `governance_policies`, `mcp_servers`, `tenant_agents`, `tenant_skills`, and `credential_sources` |
+| `te tenant show <resource> <id>` | Show one tenant resource |
+| `te tenant create <resource> --data '<json>'` | Create a tenant resource from JSON |
+| `te tenant update <resource> <id> --data '<json>'` | Update a tenant resource from JSON |
+| `te tenant delete <resource> <id>` | Delete a tenant resource; inference keys are revoked |
+| `te tenant test-policy <id> --context '<json>'` | Dry-run an AGT YAML governance policy |
+| `te tenant team list` | List tenant members, pending invitations, and allowed domains |
+| `te tenant team invite <email> --role member` | Invite a user by email; the invite token is emailed and never printed |
+| `te tenant team set-role <member-id> --inference-role-id <id>` | Assign an inference role to a member |
+| `te tenant team disable <member-id>` | Disable a member |
+| `te tenant team enable <member-id>` | Re-enable a member |
+| `te tenant team remove <member-id>` | Remove a member |
+| `te tenant team cancel-invite <invitation-id>` | Cancel a pending invitation |
+| `te tenant team domains --set "example.com,example.org"` | Replace allowed email domains |
+| `te tenant capture show` | Show inference capture settings |
+| `te tenant capture update --data '<json>'` | Update inference capture settings |
 
 ### Billing & Account
 
