@@ -21,7 +21,7 @@ const program = new Command();
 program
   .name("te")
   .description("Tuning Engines CLI — fine-tune LLMs and browse the Marketplace from your terminal")
-  .version("0.4.2");
+  .version("0.4.3");
 
 // Lazy client initialization (only when a command actually needs it)
 const getClient = (): TuningEnginesClient => {

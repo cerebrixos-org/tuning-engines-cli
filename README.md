@@ -419,6 +419,64 @@ All commands support `--json` for machine-readable output.
 | `TE_API_KEY` | API key (overrides config file) |
 | `TE_API_URL` | API URL (default: `https://app.tuningengines.com`) |
 
+## Inference Smoke Testing
+
+Use `te-inference-smoke` to exercise inference behavior as a tenant admin and, optionally, real tenant users. The default run is read-only. Set `TE_SMOKE_MUTATE=1` to create temporary inference roles, keys, policies, guardrails, MCP servers, agents, and skills, then test permission permutations and clean them up.
+
+If you only have an `sk-te-*` inference key, set `TE_INFERENCE_KEY` for
+proxy-only checks. Full role/user/policy permutations require a tenant-admin
+app API key that starts with `te_`.
+
+```bash
+TE_API_URL=https://app.tuningengines.com \
+TE_ADMIN_API_KEY=te_admin_key_here \
+TE_USER_API_KEY=te_user_key_here \
+npx -y --package tuningengines-cli@latest te-inference-smoke
+```
+
+For actual proxy model calls, enable live calls explicitly:
+
+```bash
+TE_API_URL=https://app.tuningengines.com \
+TE_INFERENCE_BASE=https://api.tuningengines.com/v1 \
+TE_ADMIN_API_KEY=te_admin_key_here \
+TE_SMOKE_MUTATE=1 \
+TE_SMOKE_LIVE_CALLS=1 \
+TE_SMOKE_CREATE_MODEL_DEPLOYMENT=1 \
+TE_SMOKE_ALLOWED_MODEL=llama-3.1-8b-fast \
+TE_SMOKE_DENIED_MODEL=llama-3.3-70b-fp8 \
+TE_SMOKE_AGENT_URL=https://httpbin.org/post \
+npx -y --package tuningengines-cli@latest te-inference-smoke
+```
+
+`TE_SMOKE_CREATE_MODEL_DEPLOYMENT=1` is useful for disposable tenants that do
+not already have an enabled model. By default the runner treats a provider
+authentication failure on an allowed model as proof that Tuning Engines RBAC
+allowed the request through to the provider. Set
+`TE_SMOKE_ALLOW_PROVIDER_AUTH_FAILURE=0` when the tenant has real provider
+credentials and the allowed call must return `200`.
+
+To test multiple tenant users, provide their API tokens:
+
+```bash
+TE_SMOKE_USERS_JSON='[
+  {"email":"member1@example.com","api_key":"te_user_key_1"},
+  {"email":"member2@example.com","api_key":"te_user_key_2"}
+]' \
+TE_ADMIN_API_KEY=te_admin_key_here \
+TE_SMOKE_MUTATE=1 \
+npx -y --package tuningengines-cli@latest te-inference-smoke
+```
+
+Preview coverage:
+
+```bash
+npx -y --package tuningengines-cli@latest te-inference-smoke --list
+```
+
+Each run writes a masked JSON report under `te-smoke-results/`, or to
+`TE_SMOKE_REPORT` when that env var is set.
+
 ## Authentication
 
 `te auth login` uses a secure device authorization flow (same pattern as `gh auth login`):
