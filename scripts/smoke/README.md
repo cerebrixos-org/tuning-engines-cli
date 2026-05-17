@@ -91,3 +91,7 @@ npx -y --package tuningengines-cli@latest te-inference-smoke --list
 ```
 
 Secrets are masked in failure output, and the script uses a temporary `HOME` so config checks do not touch a developer's real CLI config.
+
+Every run writes a JSON report. By default it is written under
+`te-smoke-results/`; set `TE_SMOKE_REPORT=path/to/report.json` to choose a
+specific path.

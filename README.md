@@ -461,6 +461,9 @@ Preview coverage:
 npx -y --package tuningengines-cli@latest te-inference-smoke --list
 ```
 
+Each run writes a masked JSON report under `te-smoke-results/`, or to
+`TE_SMOKE_REPORT` when that env var is set.
+
 ## Authentication
 
 `te auth login` uses a secure device authorization flow (same pattern as `gh auth login`):

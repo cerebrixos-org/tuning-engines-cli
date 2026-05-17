@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -17,6 +17,10 @@ const mutate = process.env.TE_SMOKE_MUTATE === "1";
 const liveCalls = process.env.TE_SMOKE_LIVE_CALLS === "1";
 const unique = `inf-smoke-${Date.now()}`;
 const tempHome = mkdtempSync(resolve(tmpdir(), "te-inference-smoke-"));
+const reportPath = resolve(
+  process.cwd(),
+  process.env.TE_SMOKE_REPORT || `te-smoke-results/${unique}.json`
+);
 const results = [];
 const cleanup = [];
 
@@ -46,6 +50,8 @@ if (args.has("--list")) {
 if (!adminToken) {
   console.error("Missing TE_ADMIN_API_KEY. Set a tenant-admin API key before running inference smoke tests.");
   console.error("Use --list to preview coverage without secrets.");
+  fail("missing TE_ADMIN_API_KEY", "Set TE_ADMIN_API_KEY to run live inference smoke tests.");
+  writeReport(0);
   process.exit(2);
 }
 
@@ -82,6 +88,7 @@ async function main() {
 
   await cleanupCreatedResources();
   printSummary(Date.now() - started);
+  writeReport(Date.now() - started);
   process.exit(results.some((result) => result.status === "failed") ? 1 : 0);
 }
 
@@ -611,12 +618,14 @@ function cliExecutable() {
 }
 
 function record(role, name, status, elapsed, exitCode, stdout = "", stderr = "", maskStdout = false) {
-  results.push({ role, name, status, elapsed, exitCode, stdout, stderr });
+  const safeStdout = mask(stdout, maskStdout);
+  const safeStderr = mask(stderr, maskStdout);
+  results.push({ role, name, status, elapsed, exitCode, stdout: safeStdout, stderr: safeStderr });
   const marker = status === "passed" ? "PASS" : status === "skipped" ? "SKIP" : status === "allowed-failure" ? "WARN" : "FAIL";
   console.log(`[${marker}] ${role}: ${name} (${elapsed}ms)`);
   if (status !== "passed" && status !== "skipped") {
-    const out = `${stdout}\n${stderr}`.trim();
-    if (out) console.log(indent(mask(out, maskStdout)));
+    const out = `${safeStdout}\n${safeStderr}`.trim();
+    if (out) console.log(indent(out));
   }
 }
 
@@ -721,6 +730,31 @@ function printSummary(elapsed) {
   console.log(`Warnings: ${counts["allowed-failure"] || 0}`);
   console.log(`Skipped: ${counts.skipped || 0}`);
   console.log(`Failed: ${counts.failed || 0}`);
+  console.log(`Report: ${reportPath}`);
+}
+
+function writeReport(elapsed) {
+  const counts = results.reduce((acc, result) => {
+    acc[result.status] = (acc[result.status] || 0) + 1;
+    return acc;
+  }, {});
+  const report = {
+    name: "te-inference-smoke",
+    unique,
+    started_at: new Date(Number(unique.replace("inf-smoke-", "")) || Date.now()).toISOString(),
+    finished_at: new Date().toISOString(),
+    elapsed_ms: elapsed,
+    app_url: appUrl,
+    inference_base: proxyBase,
+    mode: {
+      mutate,
+      live_calls: liveCalls,
+    },
+    counts,
+    results,
+  };
+  mkdirSync(dirname(reportPath), { recursive: true });
+  writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
 }
 
 function printHelp() {
