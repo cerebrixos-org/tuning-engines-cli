@@ -442,10 +442,19 @@ TE_INFERENCE_BASE=https://api.tuningengines.com/v1 \
 TE_ADMIN_API_KEY=te_admin_key_here \
 TE_SMOKE_MUTATE=1 \
 TE_SMOKE_LIVE_CALLS=1 \
-TE_SMOKE_ALLOWED_MODEL=llama-3.3-70b-fp8 \
-TE_SMOKE_DENIED_MODEL=gpt-4o-mini \
+TE_SMOKE_CREATE_MODEL_DEPLOYMENT=1 \
+TE_SMOKE_ALLOWED_MODEL=llama-3.1-8b-fast \
+TE_SMOKE_DENIED_MODEL=llama-3.3-70b-fp8 \
+TE_SMOKE_AGENT_URL=https://httpbin.org/post \
 npx -y --package tuningengines-cli@latest te-inference-smoke
 ```
+
+`TE_SMOKE_CREATE_MODEL_DEPLOYMENT=1` is useful for disposable tenants that do
+not already have an enabled model. By default the runner treats a provider
+authentication failure on an allowed model as proof that Tuning Engines RBAC
+allowed the request through to the provider. Set
+`TE_SMOKE_ALLOW_PROVIDER_AUTH_FAILURE=0` when the tenant has real provider
+credentials and the allowed call must return `200`.
 
 To test multiple tenant users, provide their API tokens:
 

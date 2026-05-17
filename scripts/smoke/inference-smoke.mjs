@@ -16,6 +16,8 @@ const userToken = process.env.TE_USER_API_KEY || "";
 const inferenceKey = process.env.TE_INFERENCE_KEY || "";
 const mutate = process.env.TE_SMOKE_MUTATE === "1";
 const liveCalls = process.env.TE_SMOKE_LIVE_CALLS === "1";
+const createModelDeployment = process.env.TE_SMOKE_CREATE_MODEL_DEPLOYMENT === "1";
+const providerAuthFailureOk = process.env.TE_SMOKE_ALLOW_PROVIDER_AUTH_FAILURE !== "0";
 const unique = `inf-smoke-${Date.now()}`;
 const tempHome = mkdtempSync(resolve(tmpdir(), "te-inference-smoke-"));
 const reportPath = resolve(
@@ -74,6 +76,7 @@ async function main() {
   console.log(`Inference proxy: ${proxyBase}`);
   console.log(`Mode: ${mutate ? "read/write RBAC matrix" : "read-only"}`);
   console.log(`Live model/provider calls: ${liveCalls ? "enabled" : "disabled (set TE_SMOKE_LIVE_CALLS=1)"}`);
+  console.log(`Create test model deployment: ${createModelDeployment ? "enabled" : "disabled"}`);
 
   if (!adminToken && inferenceKey) {
     await inferenceKeyOnlySuite();
@@ -168,6 +171,9 @@ async function rbacMatrixSuite() {
   section("inference RBAC matrix");
 
   const unrestrictedKey = createInferenceKey("unrestricted", null);
+  if (createModelDeployment) {
+    createModelDeploymentResource();
+  }
   const modelList = await proxyModels(unrestrictedKey);
   const selectedModels = selectModels(modelList);
   const allowedModel = process.env.TE_SMOKE_ALLOWED_MODEL || selectedModels.allowed;
@@ -218,7 +224,7 @@ async function rbacMatrixSuite() {
   await httpStep("restricted key can list proxy models", "GET", "/models", { bearer: restrictedKey });
 
   if (liveCalls && allowedModel) {
-    await httpStep(`allowed model call succeeds: ${allowedModel}`, "POST", "/chat/completions", {
+    await httpStep(`allowed model call reaches provider or succeeds: ${allowedModel}`, "POST", "/chat/completions", {
       bearer: restrictedKey,
       json: {
         model: allowedModel,
@@ -226,7 +232,7 @@ async function rbacMatrixSuite() {
         max_tokens: 8,
         temperature: 0,
       },
-      expectStatus: [200],
+      expectStatus: providerAuthFailureOk ? [200, 401] : [200],
     });
   } else {
     skip("allowed model chat call", "set TE_SMOKE_LIVE_CALLS=1 and provide/discover TE_SMOKE_ALLOWED_MODEL");
@@ -332,18 +338,19 @@ async function governanceAndGuardrailSuite(inferenceKey) {
     "--json",
   ], { allowFailure: true });
 
-  if (liveCalls && process.env.TE_SMOKE_GUARDRAIL_MODEL) {
+  const guardrailModel = process.env.TE_SMOKE_GUARDRAIL_MODEL || process.env.TE_SMOKE_ALLOWED_MODEL;
+  if (liveCalls && guardrailModel) {
     await httpStep("guardrail blocks matching prompt", "POST", "/chat/completions", {
       bearer: inferenceKey,
       json: {
-        model: process.env.TE_SMOKE_GUARDRAIL_MODEL,
+        model: guardrailModel,
         messages: [{ role: "user", content: "TE_SMOKE_BLOCK_ME" }],
         max_tokens: 8,
       },
-      expectStatus: [400, 403, 422],
+      expectStatus: [400],
     });
   } else {
-    skip("guardrail live blocking call", "set TE_SMOKE_LIVE_CALLS=1 and TE_SMOKE_GUARDRAIL_MODEL to verify proxy enforcement");
+    skip("guardrail live blocking call", "set TE_SMOKE_LIVE_CALLS=1 and TE_SMOKE_ALLOWED_MODEL or TE_SMOKE_GUARDRAIL_MODEL to verify proxy enforcement");
   }
 }
 
@@ -413,7 +420,7 @@ async function mcpAgentSkillSuite(allowedModel) {
     await httpStep("proxy MCP tool call", "POST", "/mcp/tools/call", {
       bearer: resourceKey,
       json: {
-        name: process.env.TE_SMOKE_MCP_TOOL_NAME,
+        tool_name: process.env.TE_SMOKE_MCP_TOOL_NAME,
         arguments: parseJsonEnv("TE_SMOKE_MCP_TOOL_ARGS", {}),
       },
       expectStatus: [200],
@@ -510,6 +517,23 @@ async function userPermutationSuite(permutations) {
       ], { allowFailure: true });
     }
   }
+}
+
+function createModelDeploymentResource() {
+  const displayName = process.env.TE_SMOKE_ALLOWED_MODEL || "llama-3.1-8b-fast";
+  const litellmModel = process.env.TE_SMOKE_LITELLM_MODEL || displayName;
+  const provider = process.env.TE_SMOKE_MODEL_PROVIDER || "workers-ai";
+
+  return createTenantResource("model_deployments", {
+    display_name: displayName,
+    litellm_model: litellmModel,
+    provider,
+    priority: Number(process.env.TE_SMOKE_MODEL_PRIORITY || 1),
+    weight: Number(process.env.TE_SMOKE_MODEL_WEIGHT || 100),
+    enabled: true,
+    supports_chat: true,
+    supports_streaming: true,
+  });
 }
 
 function createInferenceKey(label, roleId) {
@@ -818,8 +842,12 @@ Important env:
   TE_USER_API_KEY            Optional tenant-user API key.
   TE_SMOKE_MUTATE=1          Creates temporary roles, keys, policies, resources.
   TE_SMOKE_LIVE_CALLS=1      Makes chargeable/real proxy model calls.
+  TE_SMOKE_CREATE_MODEL_DEPLOYMENT=1
+                             Creates a temporary enabled model deployment.
   TE_SMOKE_ALLOWED_MODEL     Model expected to be allowed.
   TE_SMOKE_DENIED_MODEL      Model expected to be denied.
+  TE_SMOKE_ALLOW_PROVIDER_AUTH_FAILURE=0
+                             Require allowed model calls to return 200 instead of accepting provider-auth 401.
   TE_SMOKE_USER_EMAIL        Tenant user email for role assignment.
   TE_SMOKE_USERS_JSON        Multiple users: [{"email":"...","api_key":"te_..."}]
   TE_SMOKE_MCP_SERVER_URL    External test MCP SSE server.
@@ -834,6 +862,7 @@ function printPlan() {
     "CLI/app metadata: inference models, usage, JWT, capture settings",
     "Admin resource inventory: keys, roles, deployments, routing, guardrails, governance, MCP, agents, skills, credentials",
     "Temporary inference keys and JWT exchange",
+    "Optional temporary enabled deployment for disposable tenants",
     "Invalid key rejection",
     "Role model allowlist: allowed model succeeds, denied model is blocked",
     "Tenant-user role assignment via team set-role, with user JWT/proxy check",
