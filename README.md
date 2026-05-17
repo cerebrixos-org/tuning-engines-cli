@@ -419,6 +419,48 @@ All commands support `--json` for machine-readable output.
 | `TE_API_KEY` | API key (overrides config file) |
 | `TE_API_URL` | API URL (default: `https://app.tuningengines.com`) |
 
+## Inference Smoke Testing
+
+Use `te-inference-smoke` to exercise inference behavior as a tenant admin and, optionally, real tenant users. The default run is read-only. Set `TE_SMOKE_MUTATE=1` to create temporary inference roles, keys, policies, guardrails, MCP servers, agents, and skills, then test permission permutations and clean them up.
+
+```bash
+TE_API_URL=https://app.tuningengines.com \
+TE_ADMIN_API_KEY=te_admin_key_here \
+TE_USER_API_KEY=te_user_key_here \
+npx -y --package tuningengines-cli@latest te-inference-smoke
+```
+
+For actual proxy model calls, enable live calls explicitly:
+
+```bash
+TE_API_URL=https://app.tuningengines.com \
+TE_INFERENCE_BASE=https://api.tuningengines.com/v1 \
+TE_ADMIN_API_KEY=te_admin_key_here \
+TE_SMOKE_MUTATE=1 \
+TE_SMOKE_LIVE_CALLS=1 \
+TE_SMOKE_ALLOWED_MODEL=llama-3.3-70b-fp8 \
+TE_SMOKE_DENIED_MODEL=gpt-4o-mini \
+npx -y --package tuningengines-cli@latest te-inference-smoke
+```
+
+To test multiple tenant users, provide their API tokens:
+
+```bash
+TE_SMOKE_USERS_JSON='[
+  {"email":"member1@example.com","api_key":"te_user_key_1"},
+  {"email":"member2@example.com","api_key":"te_user_key_2"}
+]' \
+TE_ADMIN_API_KEY=te_admin_key_here \
+TE_SMOKE_MUTATE=1 \
+npx -y --package tuningengines-cli@latest te-inference-smoke
+```
+
+Preview coverage:
+
+```bash
+npx -y --package tuningengines-cli@latest te-inference-smoke --list
+```
+
 ## Authentication
 
 `te auth login` uses a secure device authorization flow (same pattern as `gh auth login`):
