@@ -423,6 +423,10 @@ All commands support `--json` for machine-readable output.
 
 Use `te-inference-smoke` to exercise inference behavior as a tenant admin and, optionally, real tenant users. The default run is read-only. Set `TE_SMOKE_MUTATE=1` to create temporary inference roles, keys, policies, guardrails, MCP servers, agents, and skills, then test permission permutations and clean them up.
 
+If you only have an `sk-te-*` inference key, set `TE_INFERENCE_KEY` for
+proxy-only checks. Full role/user/policy permutations require a tenant-admin
+app API key that starts with `te_`.
+
 ```bash
 TE_API_URL=https://app.tuningengines.com \
 TE_ADMIN_API_KEY=te_admin_key_here \

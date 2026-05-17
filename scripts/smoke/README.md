@@ -21,6 +21,18 @@ TE_ADMIN_API_KEY=te_admin_key_here \
 npm run smoke:inference
 ```
 
+## Proxy-only inference key smoke
+
+If you only have an `sk-te-*` inference key, the harness can still test JWT
+exchange, proxy model visibility, invalid-key rejection, and optional live
+model calls. It cannot create roles, users, policies, guardrails, MCP servers,
+agents, or skills.
+
+```bash
+TE_INFERENCE_KEY=sk-te_key_here \
+npm run smoke:inference
+```
+
 ## Role and permission matrix
 
 This mode creates temporary roles, inference keys, policies, guardrails, MCP/agent/skill records, then removes the records it created.

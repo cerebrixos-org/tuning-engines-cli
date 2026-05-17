@@ -13,6 +13,7 @@ const appUrl = trimSlash(process.env.TE_API_URL || "https://app.tuningengines.co
 const proxyBase = trimSlash(process.env.TE_INFERENCE_BASE || "https://api.tuningengines.com/v1");
 const adminToken = process.env.TE_ADMIN_API_KEY || process.env.TE_API_KEY || "";
 const userToken = process.env.TE_USER_API_KEY || "";
+const inferenceKey = process.env.TE_INFERENCE_KEY || "";
 const mutate = process.env.TE_SMOKE_MUTATE === "1";
 const liveCalls = process.env.TE_SMOKE_LIVE_CALLS === "1";
 const unique = `inf-smoke-${Date.now()}`;
@@ -47,10 +48,11 @@ if (args.has("--list")) {
   process.exit(0);
 }
 
-if (!adminToken) {
-  console.error("Missing TE_ADMIN_API_KEY. Set a tenant-admin API key before running inference smoke tests.");
+if (!adminToken && !inferenceKey) {
+  console.error("Missing TE_ADMIN_API_KEY or TE_INFERENCE_KEY.");
+  console.error("Set TE_ADMIN_API_KEY for full admin/user matrix tests, or TE_INFERENCE_KEY for proxy-only checks.");
   console.error("Use --list to preview coverage without secrets.");
-  fail("missing TE_ADMIN_API_KEY", "Set TE_ADMIN_API_KEY to run live inference smoke tests.");
+  fail("missing credentials", "Set TE_ADMIN_API_KEY for full tests or TE_INFERENCE_KEY for proxy-only tests.");
   writeReport(0);
   process.exit(2);
 }
@@ -73,6 +75,13 @@ async function main() {
   console.log(`Mode: ${mutate ? "read/write RBAC matrix" : "read-only"}`);
   console.log(`Live model/provider calls: ${liveCalls ? "enabled" : "disabled (set TE_SMOKE_LIVE_CALLS=1)"}`);
 
+  if (!adminToken && inferenceKey) {
+    await inferenceKeyOnlySuite();
+    printSummary(Date.now() - started);
+    writeReport(Date.now() - started);
+    process.exit(results.some((result) => result.status === "failed") ? 1 : 0);
+  }
+
   await readOnlyInferenceSuite("admin", adminToken, true);
   if (userToken) {
     await readOnlyInferenceSuite("user", userToken, false);
@@ -90,6 +99,44 @@ async function main() {
   printSummary(Date.now() - started);
   writeReport(Date.now() - started);
   process.exit(results.some((result) => result.status === "failed") ? 1 : 0);
+}
+
+async function inferenceKeyOnlySuite() {
+  section("inference-key-only proxy checks");
+  await httpStep("app token exchange accepts inference key", "POST", `${appUrl}/api/v1/inference/token`, {
+    absolute: true,
+    bearer: inferenceKey,
+    expectStatus: [200],
+    maskBody: true,
+  });
+  const modelsResponse = await httpStep("proxy /models with inference key", "GET", "/models", {
+    bearer: inferenceKey,
+    expectStatus: [200],
+  });
+  const models = normalizeModels(modelsResponse?.json);
+  const selected = selectModels(models);
+  const allowedModel = process.env.TE_SMOKE_ALLOWED_MODEL || selected.allowed;
+  if (allowedModel && liveCalls) {
+    await httpStep(`proxy chat completion with inference key: ${allowedModel}`, "POST", "/chat/completions", {
+      bearer: inferenceKey,
+      json: {
+        model: allowedModel,
+        messages: [{ role: "user", content: "Reply with exactly: ok" }],
+        max_tokens: 8,
+        temperature: 0,
+      },
+      expectStatus: [200],
+    });
+  } else if (allowedModel) {
+    skip("proxy chat completion with inference key", "set TE_SMOKE_LIVE_CALLS=1 to make chargeable live model calls");
+  } else {
+    skip("proxy chat completion with inference key", "no model discovered; set TE_SMOKE_ALLOWED_MODEL");
+  }
+  await httpStep("proxy rejects invalid inference key", "GET", "/models", {
+    bearer: "sk-te-invalid-smoke-key",
+    expectStatus: [401, 403],
+  });
+  skip("admin/user role matrix", "requires TE_ADMIN_API_KEY app API token, not only an sk-te inference key");
 }
 
 async function readOnlyInferenceSuite(role, token, isAdmin) {
@@ -699,7 +746,7 @@ function decodeJwt(token) {
 }
 
 function mask(text, maskAll = false) {
-  const secrets = [adminToken, userToken, process.env.TE_INFERENCE_KEY].filter(Boolean);
+  const secrets = [adminToken, userToken, inferenceKey].filter(Boolean);
   let masked = String(text);
   for (const secret of secrets) masked = masked.split(secret).join("[secret]");
   masked = masked
@@ -766,7 +813,8 @@ function printHelp() {
 Important env:
   TE_API_URL                 App API URL. Default: https://app.tuningengines.com
   TE_INFERENCE_BASE          Proxy /v1 base. Default: https://api.tuningengines.com/v1
-  TE_ADMIN_API_KEY           Required tenant-admin API key.
+  TE_ADMIN_API_KEY           Tenant-admin app API key for full matrix.
+  TE_INFERENCE_KEY           sk-te inference key for proxy-only checks.
   TE_USER_API_KEY            Optional tenant-user API key.
   TE_SMOKE_MUTATE=1          Creates temporary roles, keys, policies, resources.
   TE_SMOKE_LIVE_CALLS=1      Makes chargeable/real proxy model calls.
