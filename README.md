@@ -69,7 +69,7 @@ te jobs create --agent sera_code_repo \
 ```bash
 npm install -g tuningengines-cli
 
-# Or run without installing after the next npm release is published
+# Or run without installing
 npx -y tuningengines-cli auth status
 
 # Sign up or log in (opens browser — works for new accounts too)
@@ -154,6 +154,31 @@ When connected, your AI assistant can:
 - "Create an autocomplete model for this codebase" (auto-selects Cody)
 
 The `create_job` tool description includes full agent details and model lists, so AI assistants automatically select the right agent and model based on what you ask for.
+
+## Unified API Endpoint
+
+Tuning Engines can be used anywhere a tool accepts an OpenAI-compatible API
+base URL. Point the client at:
+
+```text
+https://api.tuningengines.com/v1
+```
+
+Use an inference key that starts with `sk-te-...` for live model calls, and use
+the model IDs shown by:
+
+```bash
+te inference models
+```
+
+This lets OpenCode, Temporal activities, LangGraph apps, OpenAI SDK clients,
+and other custom-provider clients route through the same Tuning Engines control
+plane for model RBAC, routing, fallbacks, guardrails, AGT policy, traces,
+usage metering, and cost attribution.
+
+See [docs/unified-api-endpoint.md](docs/unified-api-endpoint.md) for copy-paste
+examples for OpenCode, Temporal, Python, JavaScript, and other
+OpenAI-compatible clients.
 
 ## Agent Runtime SDK: LangGraph and Temporal
 

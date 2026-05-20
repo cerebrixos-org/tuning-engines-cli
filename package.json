@@ -26,6 +26,7 @@
   },
   "files": [
     "dist",
+    "docs",
     "scripts/smoke",
     "packages/tuning-agents",
     "README.md"
