@@ -92,6 +92,10 @@ te jobs status <job-id> --watch
 
 # View your trained models
 te models list
+
+# Create a governed LangGraph or Temporal starter
+te orchestration init langgraph
+te orchestration init temporal
 ```
 
 ## MCP Server Setup
@@ -212,8 +216,19 @@ TuningAgentWorkflow = define_temporal_workflow()
 ```
 
 The SDK captures runtime events from LangGraph/Temporal and posts them to
-`POST /api/v1/traces`. The Rails app pairs that with existing inference usage,
-request capture, policy, audit, and billing logs.
+`POST /api/v1/traces`. The app pairs that with inference usage, request
+capture, policy decisions, approval requests, audit, and billing logs.
+
+Generate a starter kit:
+
+```bash
+te orchestration init langgraph --dir ./lg-te-demo
+te orchestration init temporal --dir ./temporal-te-demo
+```
+
+The generated examples include governed model calls, trace flushing, MCP tool
+calls, registered agent calls, skill tool specs, policy context metadata, and
+approval retry helpers.
 
 ## CLI Commands
 
@@ -279,6 +294,24 @@ request capture, policy, audit, and billing logs.
 | `te inference models` | List available inference models |
 | `te inference usage` | Show inference API usage stats |
 | `te inference jwt` | Get a JWT for direct API access |
+
+### Runtime Traces and Approvals
+
+| Command | Description |
+|---------|-------------|
+| `te traces list` | List LangGraph, Temporal, and custom runtime traces |
+| `te traces show <run-id>` | Show one trace, including events, policy decisions, and approvals when linked |
+| `te approvals list --status pending` | List policy approval requests |
+| `te approvals show <id>` | Show approval detail and retry metadata |
+| `te approvals approve <id>` | Approve a pending request |
+| `te approvals deny <id>` | Deny a pending request |
+
+### Orchestration Starters
+
+| Command | Description |
+|---------|-------------|
+| `te orchestration init langgraph` | Create a LangGraph starter wired to Tuning Engines governance and traces |
+| `te orchestration init temporal` | Create a Temporal worker starter wired to Tuning Engines governance and traces |
 
 ### Agents
 

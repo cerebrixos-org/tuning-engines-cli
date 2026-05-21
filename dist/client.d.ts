@@ -148,6 +148,19 @@ export declare class TuningEnginesClient {
     getInferenceJwt(): Promise<any>;
     listAgents(): Promise<any>;
     getAgent(agentId: string): Promise<any>;
+    listTraces(options?: {
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getTrace(runId: string): Promise<any>;
+    listApprovals(options?: {
+        status?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getApproval(id: string): Promise<any>;
+    approveApproval(id: string): Promise<any>;
+    denyApproval(id: string): Promise<any>;
     listTenantResource(resource: string, options?: {
         limit?: number;
         offset?: number;
