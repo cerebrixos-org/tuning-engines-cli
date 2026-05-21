@@ -10,6 +10,7 @@ Tuning Engines for the things it already does well:
 - A2A tenant-agent dispatch through `/v1/agents/{name}/message`
 - Agent/skill OpenAI tool specs that line up with proxy RBAC and AGT policy
 - Registry/RBAC/governance enforcement at the gateway
+- AGT shadow-mode policy decisions and human approval retries
 - Usage, request capture, auditability, and token economics
 - Client-side causal traces for LLM calls, MCP calls, LangGraph runs, and
   Temporal activities
@@ -89,6 +90,18 @@ resp = client.chat(
 )
 ```
 
+If a policy returns `needs_approval`, approve it in the Tuning Engines UI or
+with `te approvals approve <id>`, then retry with the approval id:
+
+```python
+resp = client.chat(
+    model=manifest.model,
+    messages=[{"role": "user", "content": "Run the governed action again."}],
+    tools=manifest.openai_tools(),
+    approval_id="apr_...",
+)
+```
+
 ## Temporal
 
 Temporal provides durable execution, retries, resume-after-crash, schedules, and
@@ -148,8 +161,8 @@ This SDK captures the full client/runtime-side causal trace:
 - Errors and latency metadata
 
 Rails/proxy already capture the gateway side: inference usage, request capture,
-audit logs, policy decisions, token counts, and billing attribution. The SDK
-captures the runtime side and can persist it with:
+audit logs, policy decisions, approval requests, token counts, and billing
+attribution. The SDK captures the runtime side and can persist it with:
 
 ```python
 client.flush_trace(name="support-agent", runtime="langgraph", status="succeeded")

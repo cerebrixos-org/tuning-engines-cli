@@ -41,7 +41,16 @@ class TuningClient:
 
     @property
     def openai(self) -> OpenAI:
-        return OpenAI(api_key=self.api_key, base_url=self.inference_url, timeout=self.timeout)
+        return self.openai_client()
+
+    def openai_client(self, *, approval_id: str | None = None) -> OpenAI:
+        headers = {"X-TE-Approval-ID": approval_id} if approval_id else None
+        return OpenAI(
+            api_key=self.api_key,
+            base_url=self.inference_url,
+            timeout=self.timeout,
+            default_headers=headers,
+        )
 
     def request(
         self,
@@ -51,12 +60,13 @@ class TuningClient:
         json: Mapping[str, Any] | None = None,
         base_url: str | None = None,
         trace_type: str = "http",
+        headers: Mapping[str, str] | None = None,
     ) -> Any:
         url = f"{(base_url or self.api_url).rstrip('/')}/{path.lstrip('/')}"
         span_id = self.trace.start(trace_type, {"method": method, "url": url})
         started = time.perf_counter()
         try:
-            with httpx.Client(timeout=self.timeout, headers=self._headers()) as client:
+            with httpx.Client(timeout=self.timeout, headers=self._headers(headers)) as client:
                 response = client.request(method, url, json=json)
             payload = self._parse_response(response)
             self.trace.finish(
@@ -79,12 +89,13 @@ class TuningClient:
         json: Mapping[str, Any] | None = None,
         base_url: str | None = None,
         trace_type: str = "http",
+        headers: Mapping[str, str] | None = None,
     ) -> Any:
         url = f"{(base_url or self.api_url).rstrip('/')}/{path.lstrip('/')}"
         span_id = self.trace.start(trace_type, {"method": method, "url": url})
         started = time.perf_counter()
         try:
-            async with httpx.AsyncClient(timeout=self.timeout, headers=self._headers()) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, headers=self._headers(headers)) as client:
                 response = await client.request(method, url, json=json)
             payload = self._parse_response(response)
             self.trace.finish(
@@ -99,11 +110,22 @@ class TuningClient:
             self.trace.error(span_id, exc)
             raise
 
-    def chat(self, *, model: str, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
+    def chat(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, Any]],
+        approval_id: str | None = None,
+        **kwargs: Any,
+    ) -> Any:
         span_id = self.trace.start("llm", {"model": model})
         try:
             clean_kwargs = {key: value for key, value in kwargs.items() if value is not None}
-            response = self.openai.chat.completions.create(model=model, messages=messages, **clean_kwargs)
+            response = self.openai_client(approval_id=approval_id).chat.completions.create(
+                model=model,
+                messages=messages,
+                **clean_kwargs,
+            )
             usage = getattr(response, "usage", None)
             self.trace.finish(
                 span_id,
@@ -186,6 +208,7 @@ class TuningClient:
         agent_name: str,
         message: str,
         context: Mapping[str, Any] | None = None,
+        approval_id: str | None = None,
     ) -> Any:
         return self.request(
             "POST",
@@ -193,6 +216,7 @@ class TuningClient:
             base_url=self.inference_url.removesuffix("/v1"),
             json={"message": message, "context": dict(context or {})},
             trace_type="agent",
+            headers={"X-TE-Approval-ID": approval_id} if approval_id else None,
         )
 
     async def acall_agent(
@@ -201,6 +225,7 @@ class TuningClient:
         agent_name: str,
         message: str,
         context: Mapping[str, Any] | None = None,
+        approval_id: str | None = None,
     ) -> Any:
         return await self.arequest(
             "POST",
@@ -208,6 +233,7 @@ class TuningClient:
             base_url=self.inference_url.removesuffix("/v1"),
             json={"message": message, "context": dict(context or {})},
             trace_type="agent",
+            headers={"X-TE-Approval-ID": approval_id} if approval_id else None,
         )
 
     def list_mcp_tools(self) -> Any:
@@ -219,6 +245,7 @@ class TuningClient:
         server_name: str,
         tool_name: str,
         arguments: Mapping[str, Any] | None = None,
+        approval_id: str | None = None,
     ) -> Any:
         return self.request(
             "POST",
@@ -230,6 +257,7 @@ class TuningClient:
                 "arguments": dict(arguments or {}),
             },
             trace_type="mcp",
+            headers={"X-TE-Approval-ID": approval_id} if approval_id else None,
         )
 
     async def acall_mcp_tool(
@@ -238,6 +266,7 @@ class TuningClient:
         server_name: str,
         tool_name: str,
         arguments: Mapping[str, Any] | None = None,
+        approval_id: str | None = None,
     ) -> Any:
         return await self.arequest(
             "POST",
@@ -249,18 +278,21 @@ class TuningClient:
                 "arguments": dict(arguments or {}),
             },
             trace_type="mcp",
+            headers={"X-TE-Approval-ID": approval_id} if approval_id else None,
         )
 
     def new_run_id(self, prefix: str = "run") -> str:
         return f"{prefix}_{uuid.uuid4().hex}"
 
-    def _headers(self) -> dict[str, str]:
-        return {
+    def _headers(self, extra: Mapping[str, str] | None = None) -> dict[str, str]:
+        headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Accept": "application/json",
             "Content-Type": "application/json",
             "User-Agent": self.user_agent,
         }
+        headers.update({k: v for k, v in (extra or {}).items() if v})
+        return headers
 
     @staticmethod
     def _parse_response(response: httpx.Response) -> Any:
@@ -270,6 +302,10 @@ class TuningClient:
         except ValueError:
             payload = text
         if response.status_code >= 400:
-            message = payload.get("error") if isinstance(payload, dict) else payload
+            message = None
+            if isinstance(payload, dict):
+                message = payload.get("error") or payload.get("detail")
+            else:
+                message = payload
             raise TuningError(f"Tuning Engines API error {response.status_code}: {message}")
         return payload

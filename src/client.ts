@@ -347,6 +347,43 @@ export class TuningEnginesClient {
     return this.request("GET", `/api/v1/agents/${agentId}`);
   }
 
+  // --- Runtime traces ---
+
+  async listTraces(options?: { limit?: number; offset?: number }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/traces${qs ? `?${qs}` : ""}`);
+  }
+
+  async getTrace(runId: string): Promise<any> {
+    return this.request("GET", `/api/v1/traces/${encodeURIComponent(runId)}`);
+  }
+
+  // --- Approval requests ---
+
+  async listApprovals(options?: { status?: string; limit?: number; offset?: number }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.status) params.set("status", options.status);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/approvals${qs ? `?${qs}` : ""}`);
+  }
+
+  async getApproval(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/approvals/${encodeURIComponent(id)}`);
+  }
+
+  async approveApproval(id: string): Promise<any> {
+    return this.request("POST", `/api/v1/approvals/${encodeURIComponent(id)}/approve`);
+  }
+
+  async denyApproval(id: string): Promise<any> {
+    return this.request("POST", `/api/v1/approvals/${encodeURIComponent(id)}/deny`);
+  }
+
   // --- Tenant admin automation resources ---
 
   async listTenantResource(resource: string, options?: { limit?: number; offset?: number }): Promise<any> {

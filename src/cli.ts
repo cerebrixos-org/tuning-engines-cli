@@ -15,13 +15,16 @@ import { registerEvaluationCommands } from "./commands/evaluations";
 import { registerInferenceCommands } from "./commands/inference";
 import { registerAgentCommands } from "./commands/agents";
 import { registerTenantCommands } from "./commands/tenant";
+import { registerApprovalCommands } from "./commands/approvals";
+import { registerTraceCommands } from "./commands/traces";
+import { registerOrchestrationCommands } from "./commands/orchestration";
 
 const program = new Command();
 
 program
   .name("te")
   .description("Tuning Engines CLI — fine-tune LLMs and browse the Marketplace from your terminal")
-  .version("0.4.3");
+  .version("0.4.5");
 
 // Lazy client initialization (only when a command actually needs it)
 const getClient = (): TuningEnginesClient => {
@@ -44,6 +47,9 @@ registerEvaluationCommands(program, getClient);
 registerInferenceCommands(program, getClient);
 registerAgentCommands(program, getClient);
 registerTenantCommands(program, getClient);
+registerApprovalCommands(program, getClient);
+registerTraceCommands(program, getClient);
+registerOrchestrationCommands(program);
 
 // MCP server subcommand
 program
