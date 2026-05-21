@@ -361,6 +361,90 @@ export class TuningEnginesClient {
     return this.request("GET", `/api/v1/traces/${encodeURIComponent(runId)}`);
   }
 
+  // --- Runtime interventions ---
+
+  async listRuntimeInterventions(options?: {
+    runId?: string;
+    status?: string;
+    kind?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.runId) params.set("run_id", options.runId);
+    if (options?.status) params.set("status", options.status);
+    if (options?.kind) params.set("kind", options.kind);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/runtime_interventions${qs ? `?${qs}` : ""}`);
+  }
+
+  async createRuntimeIntervention(
+    runId: string,
+    params: {
+      kind: string;
+      reason?: string;
+      target_event_id?: string;
+      expires_at?: string;
+      metadata?: Record<string, any>;
+      request_context?: Record<string, any>;
+    }
+  ): Promise<any> {
+    return this.request("POST", `/api/v1/traces/${encodeURIComponent(runId)}/interventions`, params);
+  }
+
+  async ackRuntimeIntervention(id: string, metadata?: Record<string, any>): Promise<any> {
+    return this.request("POST", `/api/v1/runtime_interventions/${encodeURIComponent(id)}/ack`, metadata ? { metadata } : undefined);
+  }
+
+  async completeRuntimeIntervention(id: string, metadata?: Record<string, any>): Promise<any> {
+    return this.request("POST", `/api/v1/runtime_interventions/${encodeURIComponent(id)}/complete`, metadata ? { metadata } : undefined);
+  }
+
+  async failRuntimeIntervention(id: string, metadata?: Record<string, any>): Promise<any> {
+    return this.request("POST", `/api/v1/runtime_interventions/${encodeURIComponent(id)}/fail`, metadata ? { metadata } : undefined);
+  }
+
+  // --- Runtime state references ---
+
+  async listRuntimeStateReferences(options?: {
+    runId?: string;
+    referenceType?: string;
+    provider?: string;
+    resourceType?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.runId) params.set("run_id", options.runId);
+    if (options?.referenceType) params.set("reference_type", options.referenceType);
+    if (options?.provider) params.set("provider", options.provider);
+    if (options?.resourceType) params.set("resource_type", options.resourceType);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/runtime_state_references${qs ? `?${qs}` : ""}`);
+  }
+
+  async upsertRuntimeStateReference(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/runtime_state_references", params);
+  }
+
+  // --- Registry sync ---
+
+  async dryRunRegistrySync(manifest: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/registry_syncs/dry_run", { manifest });
+  }
+
+  async applyRegistrySync(manifest: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/registry_syncs", { manifest });
+  }
+
+  async getRegistrySync(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/registry_syncs/${encodeURIComponent(id)}`);
+  }
+
   // --- Approval requests ---
 
   async listApprovals(options?: { status?: string; limit?: number; offset?: number }): Promise<any> {

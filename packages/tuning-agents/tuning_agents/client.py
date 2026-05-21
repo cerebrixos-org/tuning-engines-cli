@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 from openai import OpenAI
@@ -280,6 +281,87 @@ class TuningClient:
             trace_type="mcp",
             headers={"X-TE-Approval-ID": approval_id} if approval_id else None,
         )
+
+    def list_interventions(
+        self,
+        *,
+        run_id: str,
+        status: str | None = None,
+        kind: str | None = None,
+    ) -> Any:
+        params = {"run_id": run_id, "status": status, "kind": kind}
+        query = urlencode({key: value for key, value in params.items() if value})
+        return self.request("GET", f"/api/v1/runtime_interventions?{query}", trace_type="control")
+
+    def ack_intervention(self, intervention_id: str, *, metadata: Mapping[str, Any] | None = None) -> Any:
+        return self.request(
+            "POST",
+            f"/api/v1/runtime_interventions/{intervention_id}/ack",
+            json={"metadata": dict(metadata or {})},
+            trace_type="control",
+        )
+
+    def complete_intervention(self, intervention_id: str, *, metadata: Mapping[str, Any] | None = None) -> Any:
+        return self.request(
+            "POST",
+            f"/api/v1/runtime_interventions/{intervention_id}/complete",
+            json={"metadata": dict(metadata or {})},
+            trace_type="control",
+        )
+
+    def fail_intervention(self, intervention_id: str, *, metadata: Mapping[str, Any] | None = None) -> Any:
+        return self.request(
+            "POST",
+            f"/api/v1/runtime_interventions/{intervention_id}/fail",
+            json={"metadata": dict(metadata or {})},
+            trace_type="control",
+        )
+
+    def record_state_reference(
+        self,
+        *,
+        reference_type: str,
+        external_id: str,
+        run_id: str | None = None,
+        provider: str | None = None,
+        uri: str | None = None,
+        runtime: str | None = None,
+        resource_type: str | None = None,
+        resource_id: str | None = None,
+        resource_name: str | None = None,
+        status: str | None = None,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> Any:
+        payload = {
+            "reference_type": reference_type,
+            "external_id": external_id,
+            "run_id": run_id or self.trace.run_id,
+            "provider": provider,
+            "uri": uri,
+            "runtime": runtime,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "resource_name": resource_name,
+            "status": status,
+            "metadata": dict(metadata or {}),
+        }
+        return self.request(
+            "POST",
+            "/api/v1/runtime_state_references",
+            json={key: value for key, value in payload.items() if value is not None},
+            trace_type="control",
+        )
+
+    def list_state_references(
+        self,
+        *,
+        run_id: str,
+        reference_type: str | None = None,
+        provider: str | None = None,
+    ) -> Any:
+        params = {"run_id": run_id, "reference_type": reference_type, "provider": provider}
+        query = urlencode({key: value for key, value in params.items() if value})
+        return self.request("GET", f"/api/v1/runtime_state_references?{query}", trace_type="control")
 
     def new_run_id(self, prefix: str = "run") -> str:
         return f"{prefix}_{uuid.uuid4().hex}"

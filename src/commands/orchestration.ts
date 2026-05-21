@@ -57,6 +57,15 @@ export TE_MODEL=auto
 Use a user API token \`te_...\` for CLI/admin actions such as \`te approvals list\` and \`te traces show\`.
 Use an inference key \`sk-te-...\` for model, MCP, agent, skill, and trace-ingest calls.
 
+## Registry sync
+
+This starter includes \`tuning-registry.yml\` so MCP servers, agents, and skills can be synced instead of recreated by hand:
+
+\`\`\`bash
+te registry sync --file tuning-registry.yml --dry-run
+te registry sync --file tuning-registry.yml --apply
+\`\`\`
+
 ## Approval flow
 
 When an AGT YAML policy returns \`needs_approval\`, the proxy returns \`approval_required\` with an approval id.
@@ -68,6 +77,12 @@ te approvals approve <approval-id>
 \`\`\`
 
 The retry must include the same request context plus the approval id. The helper in this starter shows the pattern.
+
+## Runtime control and state
+
+Trace Explorer can create pause, resume, cancel, and replay requests. Your runtime polls them with \`client.list_interventions(run_id=...)\`, acknowledges, executes the behavior, then marks the request completed or failed.
+
+Use \`client.record_state_reference(...)\` to link LangGraph checkpoints, Temporal workflow IDs, vector namespaces, or external memory records without storing memory content in Tuning Engines.
 `;
 }
 
@@ -82,6 +97,7 @@ python app.py
 \`\`\`
 `,
     ".env.example": envExample(),
+    "tuning-registry.yml": registryManifest("langgraph"),
     "app.py": `import os
 import uuid
 
@@ -114,6 +130,21 @@ def main() -> None:
         api_url=os.getenv("TE_API_URL", "https://app.tuningengines.com"),
         inference_url=os.getenv("TE_INFERENCE_URL", "https://api.tuningengines.com/v1"),
     )
+    client.trace.run_id = RUN_ID
+
+    client.record_state_reference(
+        reference_type="langgraph_checkpoint",
+        provider="memory",
+        external_id=f"{RUN_ID}:initial",
+        runtime="langgraph",
+        resource_type="graph",
+        resource_name="governed-langgraph-demo",
+    )
+
+    for intervention in client.list_interventions(run_id=RUN_ID).get("runtime_interventions", []):
+        client.ack_intervention(intervention["public_id"], metadata={"worker": "langgraph-demo"})
+        # Map pause/resume/cancel/replay into your graph runtime here.
+        client.complete_intervention(intervention["public_id"], metadata={"handled": True})
 
     model = os.getenv("TE_MODEL", "auto")
     skill = skill_tool_spec("summarize", description="Summarize text under tenant policy.")
@@ -174,6 +205,7 @@ python worker.py
 \`\`\`
 `,
     ".env.example": envExample(),
+    "tuning-registry.yml": registryManifest("temporal"),
     "worker.py": `import asyncio
 import os
 import uuid
@@ -203,6 +235,19 @@ async def governed_model_activity(prompt: str, approval_id: str | None = None) -
         inference_url=os.getenv("TE_INFERENCE_URL", "https://api.tuningengines.com/v1"),
     )
     run_id = activity.info().workflow_id
+    client.trace.run_id = run_id
+    client.record_state_reference(
+        reference_type="temporal_workflow",
+        provider="temporal",
+        external_id=run_id,
+        runtime="temporal",
+        resource_type="workflow",
+        resource_name="governed-temporal-demo",
+    )
+    for intervention in client.list_interventions(run_id=run_id).get("runtime_interventions", []):
+        client.ack_intervention(intervention["public_id"], metadata={"worker": "temporal-demo"})
+        # Convert pause/resume/cancel/replay into Temporal signals/cancellation/retry here.
+        client.complete_intervention(intervention["public_id"], metadata={"handled": True})
     try:
         response = client.chat(
             model=os.getenv("TE_MODEL", "auto"),
@@ -264,5 +309,39 @@ TE_INFERENCE_URL=https://api.tuningengines.com/v1
 TE_MODEL=auto
 TEMPORAL_ADDRESS=localhost:7233
 TEMPORAL_TASK_QUEUE=tuning-engines-demo
+`;
+}
+
+function registryManifest(framework: Framework): string {
+  return `version: 1
+source: ${framework}
+resources:
+  mcp_servers:
+    - name: ${framework}-tools
+      external_ref: mcp.${framework}.tools
+      description: ${framework} MCP tools exposed to governed inference
+      url: https://${framework}.example/mcp/sse
+      transport: sse
+      auth_method: none
+      enabled: true
+      framework:
+        name: ${framework}
+  tenant_agents:
+    - name: ${framework}-agent
+      external_ref: agent.${framework}.default
+      description: Governed ${framework} agent endpoint
+      url: https://${framework}.example/agents/default
+      auth_method: none
+      enabled: true
+      framework:
+        name: ${framework}
+  tenant_skills:
+    - name: ${framework}-summarizer
+      external_ref: skill.${framework}.summarizer
+      description: Summarize ${framework} runtime context
+      source_url: https://${framework}.example/skills/summarizer
+      domain: ${framework}
+      auth_method: none
+      enabled: true
 `;
 }

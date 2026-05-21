@@ -96,6 +96,9 @@ te models list
 # Create a governed LangGraph or Temporal starter
 te orchestration init langgraph
 te orchestration init temporal
+
+# Sync the starter's MCP/agent/skill registry manifest
+te registry sync --file tuning-registry.yml --dry-run
 ```
 
 ## MCP Server Setup
@@ -217,7 +220,8 @@ TuningAgentWorkflow = define_temporal_workflow()
 
 The SDK captures runtime events from LangGraph/Temporal and posts them to
 `POST /api/v1/traces`. The app pairs that with inference usage, request
-capture, policy decisions, approval requests, audit, and billing logs.
+capture, policy decisions, approval requests, runtime interventions, external
+state references, audit, and billing logs.
 
 Generate a starter kit:
 
@@ -227,8 +231,9 @@ te orchestration init temporal --dir ./temporal-te-demo
 ```
 
 The generated examples include governed model calls, trace flushing, MCP tool
-calls, registered agent calls, skill tool specs, policy context metadata, and
-approval retry helpers.
+calls, registered agent calls, skill tool specs, policy context metadata,
+approval retry helpers, intervention polling, state reference helpers, and a
+`tuning-registry.yml` manifest.
 
 ## CLI Commands
 
@@ -300,11 +305,26 @@ approval retry helpers.
 | Command | Description |
 |---------|-------------|
 | `te traces list` | List LangGraph, Temporal, and custom runtime traces |
-| `te traces show <run-id>` | Show one trace, including events, policy decisions, and approvals when linked |
+| `te traces show <run-id>` | Show one trace, including events, policy decisions, approvals, interventions, and state references when linked |
 | `te approvals list --status pending` | List policy approval requests |
 | `te approvals show <id>` | Show approval detail and retry metadata |
 | `te approvals approve <id>` | Approve a pending request |
 | `te approvals deny <id>` | Deny a pending request |
+| `te interventions list --run-id <run-id>` | Poll pause/resume/cancel/replay requests |
+| `te interventions ack <id>` | Acknowledge a runtime intervention |
+| `te interventions complete <id>` | Mark a runtime intervention completed |
+| `te state upsert --type temporal_workflow --external-id <id>` | Store a safe pointer to external workflow or memory state |
+| `te state list --run-id <run-id>` | List state references for a run |
+
+### Registry Sync
+
+| Command | Description |
+|---------|-------------|
+| `te registry template langgraph` | Print a LangGraph registry manifest template |
+| `te registry template temporal` | Print a Temporal registry manifest template |
+| `te registry template mcp` | Print an MCP registry manifest template |
+| `te registry sync --file tuning-registry.yml --dry-run` | Validate and diff a registry manifest |
+| `te registry sync --file tuning-registry.yml --apply` | Apply MCP/agent/skill registry changes without storing raw secrets |
 
 ### Orchestration Starters
 
