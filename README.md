@@ -69,8 +69,8 @@ te jobs create --agent sera_code_repo \
 ```bash
 npm install -g tuningengines-cli
 
-# Or run without installing after the next npm release is published
-npx -y tuningengines-cli auth status
+# Or run without installing
+npx -y --package tuningengines-cli@latest te auth status
 
 # Sign up or log in (opens browser — works for new accounts too)
 te auth login
@@ -107,7 +107,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "tuning-engines": {
       "command": "npx",
-      "args": ["-y", "tuningengines-cli", "mcp", "serve"],
+      "args": ["-y", "--package", "tuningengines-cli@latest", "te", "mcp", "serve"],
       "env": {
         "TE_API_KEY": "te_your_key_here"
       }
@@ -119,7 +119,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ### Claude Code
 
 ```bash
-claude mcp add tuning-engines -- npx -y tuningengines-cli mcp serve
+claude mcp add tuning-engines -- npx -y --package tuningengines-cli@latest te mcp serve
 ```
 
 ### VS Code / Cursor / Windsurf
@@ -131,7 +131,7 @@ Add to your MCP settings (`.vscode/mcp.json` or equivalent):
   "servers": {
     "tuning-engines": {
       "command": "npx",
-      "args": ["-y", "tuningengines-cli", "mcp", "serve"],
+      "args": ["-y", "--package", "tuningengines-cli@latest", "te", "mcp", "serve"],
       "env": {
         "TE_API_KEY": "te_your_key_here"
       }
