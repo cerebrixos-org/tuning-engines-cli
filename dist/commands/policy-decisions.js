@@ -33,33 +33,35 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.registerTraceCommands = registerTraceCommands;
+exports.registerPolicyDecisionCommands = registerPolicyDecisionCommands;
 const output = __importStar(require("../output"));
 function printResult(result, asJson) {
     output.json(result);
 }
-function parseJsonObject(raw) {
-    if (!raw)
-        return {};
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        throw new Error("--data must be a JSON object");
-    }
-    return parsed;
-}
-function registerTraceCommands(program, getClient) {
-    const traces = program
-        .command("traces")
-        .description("Inspect runtime traces emitted by LangGraph, Temporal, or custom agents");
-    traces
+function registerPolicyDecisionCommands(program, getClient) {
+    const decisions = program
+        .command("policy-decisions")
+        .alias("policy")
+        .description("Inspect AGT YAML policy decisions captured by the inference gateway");
+    decisions
         .command("list")
-        .description("List runtime traces")
+        .description("List policy decisions for the current tenant")
+        .option("--decision-action <action>", "allow, deny, audit, or needs_approval")
+        .option("--policy-action <action>", "Alias for --decision-action")
+        .option("--evaluation-mode <mode>", "enforce or shadow")
+        .option("--run-id <runId>", "Filter by trace/run ID")
+        .option("--request-id <requestId>", "Filter by request ID")
         .option("-l, --limit <n>", "Max results", "50")
         .option("--offset <n>", "Offset", "0")
         .option("--json", "Output as JSON")
         .action(async (opts) => {
         try {
-            const result = await getClient().listTraces({
+            const result = await getClient().listPolicyDecisions({
+                decision_action: opts.decisionAction,
+                policy_action: opts.policyAction,
+                evaluation_mode: opts.evaluationMode,
+                run_id: opts.runId,
+                request_id: opts.requestId,
                 limit: Number(opts.limit),
                 offset: Number(opts.offset),
             });
@@ -70,28 +72,13 @@ function registerTraceCommands(program, getClient) {
             process.exit(1);
         }
     });
-    traces
-        .command("show <run-id>")
-        .description("Show one runtime trace by run_id")
+    decisions
+        .command("show <id>")
+        .description("Show one policy decision with redacted context and metadata")
         .option("--json", "Output as JSON")
-        .action(async (runId, opts) => {
+        .action(async (id, opts) => {
         try {
-            const result = await getClient().getTrace(runId);
-            printResult(result, opts.json);
-        }
-        catch (err) {
-            console.error(err.message);
-            process.exit(1);
-        }
-    });
-    traces
-        .command("ingest")
-        .description("Ingest or update a runtime trace from JSON; works with API tokens or inference keys")
-        .requiredOption("--data <json>", "Trace JSON with run_id, runtime, status, metadata, and events")
-        .option("--json", "Output as JSON")
-        .action(async (opts) => {
-        try {
-            const result = await getClient().createTrace(parseJsonObject(opts.data));
+            const result = await getClient().getPolicyDecision(id);
             printResult(result, opts.json);
         }
         catch (err) {
@@ -100,4 +87,4 @@ function registerTraceCommands(program, getClient) {
         }
     });
 }
-//# sourceMappingURL=traces.js.map
+//# sourceMappingURL=policy-decisions.js.map

@@ -146,6 +146,7 @@ export declare class TuningEnginesClient {
         model?: string;
     }): Promise<any>;
     getInferenceJwt(): Promise<any>;
+    getInferenceToken(): Promise<any>;
     listAgents(): Promise<any>;
     getAgent(agentId: string): Promise<any>;
     listTraces(options?: {
@@ -153,6 +154,17 @@ export declare class TuningEnginesClient {
         offset?: number;
     }): Promise<any>;
     getTrace(runId: string): Promise<any>;
+    createTrace(params: Record<string, any>): Promise<any>;
+    listPolicyDecisions(options?: {
+        decision_action?: string;
+        policy_action?: string;
+        evaluation_mode?: string;
+        run_id?: string;
+        request_id?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getPolicyDecision(id: string): Promise<any>;
     listApprovals(options?: {
         status?: string;
         limit?: number;
