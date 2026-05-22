@@ -157,6 +157,36 @@ export declare class TuningEnginesClient {
     }): Promise<any>;
     getTrace(runId: string): Promise<any>;
     createTrace(params: Record<string, any>): Promise<any>;
+    listRuntimeInterventions(options?: {
+        runId?: string;
+        status?: string;
+        kind?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    createRuntimeIntervention(runId: string, params: {
+        kind: string;
+        reason?: string;
+        target_event_id?: string;
+        expires_at?: string;
+        metadata?: Record<string, any>;
+        request_context?: Record<string, any>;
+    }): Promise<any>;
+    ackRuntimeIntervention(id: string, metadata?: Record<string, any>): Promise<any>;
+    completeRuntimeIntervention(id: string, metadata?: Record<string, any>): Promise<any>;
+    failRuntimeIntervention(id: string, metadata?: Record<string, any>): Promise<any>;
+    listRuntimeStateReferences(options?: {
+        runId?: string;
+        referenceType?: string;
+        provider?: string;
+        resourceType?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    upsertRuntimeStateReference(params: Record<string, any>): Promise<any>;
+    dryRunRegistrySync(manifest: Record<string, any>): Promise<any>;
+    applyRegistrySync(manifest: Record<string, any>): Promise<any>;
+    getRegistrySync(id: string): Promise<any>;
     listPolicyDecisions(options?: {
         decision_action?: string;
         policy_action?: string;

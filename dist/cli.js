@@ -55,6 +55,9 @@ const traces_1 = require("./commands/traces");
 const policy_decisions_1 = require("./commands/policy-decisions");
 const policy_templates_1 = require("./commands/policy-templates");
 const orchestration_1 = require("./commands/orchestration");
+const interventions_1 = require("./commands/interventions");
+const state_1 = require("./commands/state");
+const registry_1 = require("./commands/registry");
 const program = new commander_1.Command();
 program
     .name("te")
@@ -82,6 +85,9 @@ const getClient = () => {
 (0, tenant_1.registerTenantCommands)(program, getClient);
 (0, approvals_1.registerApprovalCommands)(program, getClient);
 (0, traces_1.registerTraceCommands)(program, getClient);
+(0, interventions_1.registerInterventionCommands)(program, getClient);
+(0, state_1.registerStateCommands)(program, getClient);
+(0, registry_1.registerRegistryCommands)(program, getClient);
 (0, policy_decisions_1.registerPolicyDecisionCommands)(program, getClient);
 (0, policy_templates_1.registerPolicyTemplateCommands)(program, getClient);
 (0, policy_templates_1.registerPolicyDraftCommands)(program, getClient);
