@@ -249,6 +249,27 @@ class TuningClient:
             trace_type="control",
         )
 
+    def upsert_state_reference(self, reference: Mapping[str, Any]) -> Any:
+        """Record a safe pointer to external workflow state or memory.
+
+        Tuning Engines stores metadata and IDs only. Keep raw memory content,
+        prompts, embeddings, signed URLs, and secrets in the owning runtime.
+        """
+        return self.request(
+            "POST",
+            "/api/v1/runtime_state_references",
+            json={"runtime_state_reference": dict(reference)},
+            trace_type="control",
+        )
+
+    async def aupsert_state_reference(self, reference: Mapping[str, Any]) -> Any:
+        return await self.arequest(
+            "POST",
+            "/api/v1/runtime_state_references",
+            json={"runtime_state_reference": dict(reference)},
+            trace_type="control",
+        )
+
     def call_agent(
         self,
         *,

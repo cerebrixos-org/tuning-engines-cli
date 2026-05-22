@@ -93,9 +93,18 @@ te jobs status <job-id> --watch
 # View your trained models
 te models list
 
-# Create a governed LangGraph or Temporal starter
+# Create a governed orchestration starter
 te orchestration init langgraph
 te orchestration init temporal
+te orchestration init inngest
+te orchestration init triggerdev
+te orchestration init hatchet
+te orchestration init restate
+te orchestration init dbos
+te orchestration init dapr
+te orchestration init prefect
+te orchestration init dagster
+te orchestration init airflow
 ```
 
 ## MCP Server Setup
@@ -186,7 +195,7 @@ See [docs/unified-api-endpoint.md](docs/unified-api-endpoint.md) for copy-paste
 examples for OpenCode, Temporal, Python, JavaScript, and other
 OpenAI-compatible clients.
 
-## Agent Runtime SDK: LangGraph and Temporal
+## Agent Runtime SDK and Orchestration Starters
 
 Use the CLI/MCP package when you want `npx` tools for assistants. Use the
 Python SDK when you want your own app to run durable agent workflows while
@@ -245,9 +254,10 @@ TuningAgentWorkflow = define_temporal_workflow()
 The SDK captures runtime events from LangGraph/Temporal and posts them to
 `POST /api/v1/traces`. Each event carries a `run_id`, `request_id`, and a
 normalized event type such as `model.call`, `mcp.tool_call`, `agent.message`,
-`workflow.step`, `human.edit`, `action.finalized`, or `outcome.recorded`. The
-app pairs that with inference usage, request capture, policy decisions,
-approval requests, audit, and billing logs.
+`workflow.step`, `human.edit`, `action.finalized`, `outcome.recorded`, or
+`state.reference`. The app pairs that with inference usage, request capture,
+policy decisions, approval requests, external state references, audit, and
+billing logs.
 
 For decision traces, store redacted signals in `metadata.decision`, for example
 `proposal_summary`, `changed_fields`, `change_summary`, `final_action`,
@@ -259,11 +269,25 @@ Generate a starter kit:
 ```bash
 te orchestration init langgraph --dir ./lg-te-demo
 te orchestration init temporal --dir ./temporal-te-demo
+te orchestration init inngest --dir ./inngest-te-demo
+te orchestration init triggerdev --dir ./trigger-te-demo
+te orchestration init hatchet --dir ./hatchet-te-demo
+te orchestration init restate --dir ./restate-te-demo
+te orchestration init dbos --dir ./dbos-te-demo
+te orchestration init dapr --dir ./dapr-te-demo
+te orchestration init prefect --dir ./prefect-te-demo
+te orchestration init dagster --dir ./dagster-te-demo
+te orchestration init airflow --dir ./airflow-te-demo
 ```
 
-The generated examples include governed model calls, trace flushing, MCP tool
-calls, registered agent calls, skill tool specs, policy context metadata,
-decision metadata, and approval retry helpers.
+LangGraph and Temporal starters use the Python runtime SDK. Inngest,
+Trigger.dev, and Hatchet starters generate TypeScript projects with a small
+self-contained Tuning Engines helper. Restate, DBOS, and Dapr starters use the
+same TypeScript helper. Prefect, Dagster, and Airflow starters generate Python
+workflow examples with a small helper module. All generated examples include
+governed model calls, trace flushing, registry manifests, policy context
+metadata, decision metadata, runtime state references, and approval retry
+patterns.
 
 ## CLI Commands
 
@@ -354,6 +378,15 @@ decision metadata, and approval retry helpers.
 |---------|-------------|
 | `te orchestration init langgraph` | Create a LangGraph starter wired to Tuning Engines governance and traces |
 | `te orchestration init temporal` | Create a Temporal worker starter wired to Tuning Engines governance and traces |
+| `te orchestration init inngest` | Create an Inngest function starter wired to Tuning Engines governance and traces |
+| `te orchestration init triggerdev` | Create a Trigger.dev task starter wired to Tuning Engines governance and traces |
+| `te orchestration init hatchet` | Create a Hatchet workflow starter wired to Tuning Engines governance and traces |
+| `te orchestration init restate` | Create a Restate service starter wired to Tuning Engines governance and traces |
+| `te orchestration init dbos` | Create a DBOS workflow starter wired to Tuning Engines governance and traces |
+| `te orchestration init dapr` | Create a Dapr Workflow starter wired to Tuning Engines governance and traces |
+| `te orchestration init prefect` | Create a Prefect flow starter wired to Tuning Engines governance and traces |
+| `te orchestration init dagster` | Create a Dagster asset starter wired to Tuning Engines governance and traces |
+| `te orchestration init airflow` | Create an Airflow DAG starter wired to Tuning Engines governance and traces |
 
 ### Agents
 

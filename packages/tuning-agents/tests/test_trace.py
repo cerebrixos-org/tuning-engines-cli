@@ -35,3 +35,21 @@ def test_trace_recorder_normalizes_event_types_and_decision_metadata():
     assert data["events"][0]["type"] == "mcp.tool_call"
     assert data["events"][0]["metadata"]["decision"]["changed_fields"] == ["region"]
     assert data["events"][0]["metadata"]["decision"]["redaction_version"] == "decision-redacted-v1"
+
+
+def test_trace_recorder_normalizes_state_reference_aliases():
+    trace = TraceRecorder(run_id="run_state")
+    trace.start(
+        "langgraph.checkpoint",
+        {
+            "state_reference": {
+                "reference_type": "langgraph_checkpoint",
+                "external_id": "thread-123/checkpoint-456",
+            }
+        },
+    )
+
+    data = trace.as_dict()
+
+    assert data["events"][0]["type"] == "state.reference"
+    assert data["events"][0]["metadata"]["state_reference"]["reference_type"] == "langgraph_checkpoint"
