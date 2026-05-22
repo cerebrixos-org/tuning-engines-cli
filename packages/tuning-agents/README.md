@@ -11,6 +11,9 @@ Tuning Engines for the things it already does well:
 - Agent/skill OpenAI tool specs that line up with proxy RBAC and AGT policy
 - Registry/RBAC/governance enforcement at the gateway
 - AGT shadow-mode policy decisions and human approval retries
+- Runtime intervention polling for pause, resume, cancel, and replay
+- External state references for LangGraph checkpoints, Temporal workflow IDs,
+  vector namespaces, and memory records
 - Usage, request capture, auditability, and token economics
 - Client-side causal traces for LLM calls, MCP calls, LangGraph runs, and
   Temporal activities
@@ -62,6 +65,14 @@ print(client.trace.as_dict())
 
 # Store the runtime trace in Tuning Engines.
 client.flush_trace(name="ticket-triage", runtime="langgraph", status="succeeded")
+
+# Store a safe pointer to checkpoint state; no memory content is stored.
+client.record_state_reference(
+    reference_type="langgraph_checkpoint",
+    provider="postgres",
+    external_id="customer-123:checkpoint-42",
+    runtime="langgraph",
+)
 ```
 
 The LangGraph adapter exposes two executable resource classes:
@@ -100,6 +111,16 @@ resp = client.chat(
     tools=manifest.openai_tools(),
     approval_id="apr_...",
 )
+```
+
+Trace Explorer can also request runtime interventions. Your runtime adapter can
+poll and execute them:
+
+```python
+for request in client.list_interventions(run_id=client.trace.run_id)["runtime_interventions"]:
+    client.ack_intervention(request["public_id"], metadata={"worker": "langgraph"})
+    # Map pause/resume/cancel/replay into your runtime here.
+    client.complete_intervention(request["public_id"], metadata={"handled": True})
 ```
 
 ## Temporal
@@ -158,6 +179,8 @@ This SDK captures the full client/runtime-side causal trace:
 - MCP tool discovery and execution
 - A2A agent dispatches
 - Temporal workflow activities
+- Runtime interventions
+- External state/memory references
 - Errors and latency metadata
 
 Events are normalized to Tuning Engines' shared taxonomy where possible:
@@ -203,6 +226,10 @@ client.flush_trace(name="support-agent", runtime="langgraph", status="succeeded"
 
 That sends events to `POST /api/v1/traces` using the same `TE_API_KEY` auth as
 the CLI/MCP server.
+
+State and intervention helpers use the same auth. Inference keys can upsert
+state references and poll/ack/complete interventions for their tenant when a
+`run_id` is provided.
 
 ## Why this exists
 

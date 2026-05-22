@@ -21,6 +21,9 @@ import { registerTraceCommands } from "./commands/traces";
 import { registerPolicyDecisionCommands } from "./commands/policy-decisions";
 import { registerPolicyDraftCommands, registerPolicyTemplateCommands } from "./commands/policy-templates";
 import { registerOrchestrationCommands } from "./commands/orchestration";
+import { registerInterventionCommands } from "./commands/interventions";
+import { registerStateCommands } from "./commands/state";
+import { registerRegistryCommands } from "./commands/registry";
 
 const program = new Command();
 
@@ -52,6 +55,9 @@ registerAgentCommands(program, getClient);
 registerTenantCommands(program, getClient);
 registerApprovalCommands(program, getClient);
 registerTraceCommands(program, getClient);
+registerInterventionCommands(program, getClient);
+registerStateCommands(program, getClient);
+registerRegistryCommands(program, getClient);
 registerPolicyDecisionCommands(program, getClient);
 registerPolicyTemplateCommands(program, getClient);
 registerPolicyDraftCommands(program, getClient);

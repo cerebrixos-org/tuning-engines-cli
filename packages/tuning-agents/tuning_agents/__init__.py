@@ -1,6 +1,6 @@
 from .trace import TraceEvent, TraceRecorder
 
-__all__ = ["TuningClient", "TraceEvent", "TraceRecorder"]
+__all__ = ["TuningClient", "TuningError", "TraceEvent", "TraceRecorder"]
 
 
 def __getattr__(name: str):
@@ -8,4 +8,8 @@ def __getattr__(name: str):
         from .client import TuningClient
 
         return TuningClient
+    if name == "TuningError":
+        from .client import TuningError
+
+        return TuningError
     raise AttributeError(name)
