@@ -318,6 +318,9 @@ class TuningEnginesClient {
     async deleteTenantResource(resource, id) {
         return this.request("DELETE", `/api/v1/tenant/${encodeURIComponent(resource)}/${encodeURIComponent(id)}`);
     }
+    async validateTenantResource(resource, params) {
+        return this.request("POST", `/api/v1/tenant/${encodeURIComponent(resource)}/validate`, params);
+    }
     async testGovernancePolicy(id, context) {
         return this.request("POST", `/api/v1/tenant/governance_policies/${encodeURIComponent(id)}/test`, { context });
     }

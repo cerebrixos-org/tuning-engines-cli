@@ -288,6 +288,18 @@ function runtimeAndGovernanceTools() {
             },
         },
         {
+            name: "tenant_resource_validate",
+            description: "Validate an unsaved guardrail or AGT governance policy without creating records. Requires tenant owner/admin API token.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    resource: { type: "string", enum: ["guardrail_policies", "governance_policies"], description: "Policy resource name" },
+                    data: { type: "object", additionalProperties: true, description: "Unsaved policy attributes plus optional sample_text/context." },
+                },
+                required: ["resource", "data"],
+            },
+        },
+        {
             name: "test_governance_policy",
             description: "Dry-run an AGT YAML governance policy against a JSON context. Requires tenant owner/admin API token.",
             inputSchema: {
@@ -1386,6 +1398,18 @@ async function startMcpServer() {
                 case "tenant_resource_delete": {
                     const resource = assertTenantResourceName(args?.resource);
                     result = await getClient().deleteTenantResource(resource, args.id);
+                    break;
+                }
+                case "tenant_resource_validate": {
+                    const resource = assertTenantResourceName(args?.resource);
+                    if (!["guardrail_policies", "governance_policies"].includes(resource)) {
+                        throw new Error("tenant_resource_validate currently supports guardrail_policies and governance_policies.");
+                    }
+                    const data = parseDataObject(args?.data);
+                    if (hasBlockedSecretField(data)) {
+                        throw new Error("MCP refuses raw secret-bearing validation payloads. Use synthetic sample values instead.");
+                    }
+                    result = await getClient().validateTenantResource(resource, data);
                     break;
                 }
                 case "test_governance_policy":

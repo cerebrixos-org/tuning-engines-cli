@@ -19,7 +19,7 @@ function parseJsonObject(raw?: string): Record<string, any> {
   if (!raw) return {};
   const parsed = JSON.parse(raw);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("--data must be a JSON object");
+    throw new Error("Expected a JSON object");
   }
   return parsed;
 }
@@ -123,6 +123,26 @@ export function registerTenantCommands(
     .action(async (resource: string, id: string, opts) => {
       try {
         const result = await getClient().deleteTenantResource(resource, id);
+        printResult(result, opts.json);
+      } catch (err: any) {
+        console.error(err.message);
+        process.exit(1);
+      }
+    });
+
+  tenant
+    .command("validate <resource>")
+    .description(`Validate an unsaved tenant policy resource from JSON. ${resourceHelp()}`)
+    .requiredOption("--data <json>", "JSON object with resource attributes")
+    .option("--sample-text <text>", "Sample text for guardrail policy validation")
+    .option("--context <json>", "Policy context JSON for AGT governance policy validation")
+    .option("--json", "Output as JSON")
+    .action(async (resource: string, opts) => {
+      try {
+        const data = parseJsonObject(opts.data);
+        if (opts.sampleText) data.sample_text = opts.sampleText;
+        if (opts.context) data.context = parseJsonObject(opts.context);
+        const result = await getClient().validateTenantResource(resource, data);
         printResult(result, opts.json);
       } catch (err: any) {
         console.error(err.message);

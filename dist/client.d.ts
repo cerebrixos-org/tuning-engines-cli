@@ -187,6 +187,7 @@ export declare class TuningEnginesClient {
     createTenantResource(resource: string, params: Record<string, any>): Promise<any>;
     updateTenantResource(resource: string, id: string, params: Record<string, any>): Promise<any>;
     deleteTenantResource(resource: string, id: string): Promise<any>;
+    validateTenantResource(resource: string, params: Record<string, any>): Promise<any>;
     testGovernancePolicy(id: string, context: Record<string, any>): Promise<any>;
     getTenantTeam(): Promise<any>;
     inviteTenantMember(params: {

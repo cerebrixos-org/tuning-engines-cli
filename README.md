@@ -352,6 +352,8 @@ stored provider keys, AWS secrets, or invitation tokens.
 | `te tenant create <resource> --data '<json>'` | Create a tenant resource from JSON |
 | `te tenant update <resource> <id> --data '<json>'` | Update a tenant resource from JSON |
 | `te tenant delete <resource> <id>` | Delete a tenant resource; inference keys are revoked |
+| `te tenant validate guardrail_policies --data '<json>' --sample-text 'hello'` | Validate/test an unsaved simple guardrail without creating records |
+| `te tenant validate governance_policies --data '<json>' --context '<json>'` | Validate/test unsaved AGT YAML without creating records |
 | `te tenant test-policy <id> --context '<json>'` | Dry-run an AGT YAML governance policy |
 | `te tenant team list` | List tenant members, pending invitations, and allowed domains |
 | `te tenant team invite <email> --role member` | Invite a user by email; the invite token is emailed and never printed |
@@ -479,6 +481,7 @@ proxy routes, inference-key creation, and raw secret-bearing mutation fields.
 | `tenant_resource_create` | Create non-secret tenant registry/config metadata |
 | `tenant_resource_update` | Update non-secret tenant registry/config metadata |
 | `tenant_resource_delete` | Delete or revoke a tenant resource |
+| `tenant_resource_validate` | Validate/test unsaved guardrail or AGT policy payloads without creating records |
 | `test_governance_policy` | Dry-run an AGT YAML governance policy |
 | `tenant_team_list` | List members, invitations, and allowed domains |
 | `tenant_team_invite` | Invite a user without returning invitation tokens |
