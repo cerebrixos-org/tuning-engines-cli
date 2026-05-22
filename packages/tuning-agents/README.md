@@ -160,6 +160,39 @@ This SDK captures the full client/runtime-side causal trace:
 - Temporal workflow activities
 - Errors and latency metadata
 
+Events are normalized to Tuning Engines' shared taxonomy where possible:
+`model.call`, `model.embedding`, `mcp.tool_call`, `skill.invoke`,
+`agent.message`, `workflow.step`, `policy.decision`, approval lifecycle events,
+`human.edit`, `action.finalized`, and `outcome.recorded`. Every SDK event also
+gets a `run_id` and `request_id`.
+
+To capture the compounding-loop signal, add redacted decision metadata:
+
+```python
+event_id = client.trace.start(
+    "agent.message",
+    {
+        "decision": client.trace.decision(
+            proposal_summary="Agent proposed updating the fallback rule.",
+            changed_fields=["fallback_model"],
+        )
+    },
+)
+client.trace.finish(
+    event_id,
+    {
+        "decision": client.trace.decision(
+            final_action="update_routing_profile",
+            outcome_label="success",
+        )
+    },
+)
+```
+
+Do not store raw prompts, provider keys, tenant secrets, or full customer data
+in trace metadata. Request capture for fine-tuning is a separate explicit
+opt-in path.
+
 Rails/proxy already capture the gateway side: inference usage, request capture,
 audit logs, policy decisions, approval requests, token counts, and billing
 attribution. The SDK captures the runtime side and can persist it with:

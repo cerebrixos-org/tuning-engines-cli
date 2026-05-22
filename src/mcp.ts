@@ -65,6 +65,12 @@ function hasBlockedSecretField(value: unknown): boolean {
   });
 }
 
+function hasBlockedSecretText(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  return /\b(sk-te-[A-Za-z0-9_-]{12,}|sk-[A-Za-z0-9_-]{12,}|te_[A-Za-z0-9_-]{12,}|AKIA[0-9A-Z]{16})\b/i.test(value) ||
+    /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|private[_-]?key|client[_-]?secret|secret)\b\s*[:=]/i.test(value);
+}
+
 function assertSafeMcpMutation(resource: string, data?: unknown): void {
   if (MCP_BLOCKED_CREATE_RESOURCE_NAMES.has(resource)) {
     throw new Error(
@@ -115,13 +121,13 @@ function runtimeAndGovernanceTools(): ToolDefinition[] {
     },
     {
       name: "create_trace",
-      description: "Ingest or update a runtime trace. Do not include secrets in trace metadata or event metadata. Works with a user API token or inference key.",
+      description: "Ingest or update a runtime trace. Include run_id/request_id and normalized event types when possible. metadata.decision must contain redacted summaries only. Do not include secrets. Works with a user API token or inference key.",
       inputSchema: {
         type: "object",
         properties: {
           data: {
             type: "object",
-            description: "Trace payload: run_id, name, runtime, status, metadata, events",
+            description: "Trace payload: run_id, request_id, name, runtime, status, metadata, events. Events may include parent_id, request_id, type, status, metadata.decision.",
             additionalProperties: true,
           },
         },
@@ -153,6 +159,35 @@ function runtimeAndGovernanceTools(): ToolDefinition[] {
           id: { type: "string", description: "Policy decision ID" },
         },
         required: ["id"],
+      },
+    },
+    {
+      name: "list_policy_templates",
+      description: "List curated AGT YAML policy templates. Requires tenant owner/admin API token.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "render_policy_template",
+      description: "Render a curated AGT YAML policy template into disabled/shadow YAML. Template params must not include secrets.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Policy template ID" },
+          template_params: { type: "object", additionalProperties: true, description: "Template parameter values" },
+        },
+        required: ["id"],
+      },
+    },
+    {
+      name: "generate_policy_draft",
+      description: "Generate an AI-assisted AGT YAML draft. Drafts are disabled/shadow and must be reviewed/tested/saved explicitly. Do not include secrets.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "Natural-language policy intent without secrets" },
+          scope: { type: "string", description: "Optional AGT scope such as all, mcp_tool, agent, skill, or chat_tool" },
+        },
+        required: ["prompt"],
       },
     },
     {
@@ -1385,6 +1420,33 @@ export async function startMcpServer(): Promise<void> {
         case "show_policy_decision":
           result = await getClient().getPolicyDecision(args!.id as string);
           break;
+
+        case "list_policy_templates":
+          result = await getClient().listPolicyTemplates();
+          break;
+
+        case "render_policy_template": {
+          const templateParams = args?.template_params === undefined
+            ? {}
+            : parseDataObject(args.template_params, "template_params");
+          if (hasBlockedSecretField(templateParams)) {
+            throw new Error("MCP refuses raw secret-bearing template parameters. Use credential_source_id references or remove secrets.");
+          }
+          result = await getClient().renderPolicyTemplate(args!.id as string, templateParams);
+          break;
+        }
+
+        case "generate_policy_draft": {
+          const prompt = String(args?.prompt || "");
+          if (hasBlockedSecretText(prompt)) {
+            throw new Error("MCP refuses to send secret-looking text to policy draft generation. Remove keys, tokens, passwords, and secrets.");
+          }
+          result = await getClient().generatePolicyDraft({
+            prompt,
+            scope: args?.scope as string | undefined,
+          });
+          break;
+        }
 
         case "list_approvals":
           result = await getClient().listApprovals({

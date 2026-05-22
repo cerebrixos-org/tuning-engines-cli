@@ -1,2 +1,4 @@
 node_modules/
 *.tgz
+__pycache__/
+*.pyc

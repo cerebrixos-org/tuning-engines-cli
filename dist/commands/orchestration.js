@@ -96,6 +96,19 @@ te approvals approve <approval-id>
 \`\`\`
 
 The retry must include the same request context plus the approval id. The helper in this starter shows the pattern.
+
+## Decision traces
+
+Every model, MCP, agent, skill, approval, and runtime event should carry:
+
+- \`run_id\`: one durable workflow/graph/run id.
+- \`request_id\`: one request/span id, generated as \`req_...\`.
+- normalized event \`type\`: for example \`model.call\`, \`mcp.tool_call\`, \`agent.message\`, \`workflow.step\`, \`human.edit\`, \`action.finalized\`, or \`outcome.recorded\`.
+
+For the compounding-loop signal, record redacted decision metadata only:
+\`proposal_summary\`, \`changed_fields\`, \`change_summary\`, \`final_action\`,
+\`outcome_label\`, and \`reason_summary\`. Do not put raw prompts, provider keys,
+tenant secrets, or full customer data into trace metadata.
 `;
 }
 function langgraphFiles() {
@@ -155,7 +168,27 @@ def main() -> None:
         )
 
     try:
+        proposal_event = client.trace.start(
+            "agent.message",
+            {
+                "request_id": f"req_{uuid.uuid4().hex}",
+                "decision": client.trace.decision(
+                    proposal_summary="Call the governed model from LangGraph.",
+                    changed_fields=[],
+                ),
+            },
+        )
         governed_model_call()
+        client.trace.finish(
+            proposal_event,
+            {
+                "decision": client.trace.decision(
+                    final_action="model.call",
+                    outcome_label="success",
+                    reason_summary="Provider call completed through Tuning Engines.",
+                ),
+            },
+        )
     except TuningError as exc:
         print("Model call needs attention:", exc)
 
@@ -235,6 +268,17 @@ async def governed_model_activity(prompt: str, approval_id: str | None = None) -
             messages=[{"role": "user", "content": prompt}],
             metadata=policy_context("temporal-model-call", run_id),
             approval_id=approval_id,
+        )
+        client.trace.start(
+            "outcome.recorded",
+            {
+                "request_id": f"req_{uuid.uuid4().hex}",
+                "decision": client.trace.decision(
+                    final_action="model.call",
+                    outcome_label="success",
+                    reason_summary="Temporal activity completed through Tuning Engines.",
+                ),
+            },
         )
         client.flush_trace(name="temporal-governed-demo", runtime="temporal", status="succeeded")
         return response.model_dump(mode="json") if hasattr(response, "model_dump") else response

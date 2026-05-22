@@ -218,8 +218,16 @@ TuningAgentWorkflow = define_temporal_workflow()
 ```
 
 The SDK captures runtime events from LangGraph/Temporal and posts them to
-`POST /api/v1/traces`. The app pairs that with inference usage, request
-capture, policy decisions, approval requests, audit, and billing logs.
+`POST /api/v1/traces`. Each event carries a `run_id`, `request_id`, and a
+normalized event type such as `model.call`, `mcp.tool_call`, `agent.message`,
+`workflow.step`, `human.edit`, `action.finalized`, or `outcome.recorded`. The
+app pairs that with inference usage, request capture, policy decisions,
+approval requests, audit, and billing logs.
+
+For decision traces, store redacted signals in `metadata.decision`, for example
+`proposal_summary`, `changed_fields`, `change_summary`, `final_action`,
+`outcome_label`, and `reason_summary`. Do not place raw prompts, provider keys,
+tenant secrets, or full customer data in trace metadata.
 
 Generate a starter kit:
 
@@ -229,8 +237,8 @@ te orchestration init temporal --dir ./temporal-te-demo
 ```
 
 The generated examples include governed model calls, trace flushing, MCP tool
-calls, registered agent calls, skill tool specs, policy context metadata, and
-approval retry helpers.
+calls, registered agent calls, skill tool specs, policy context metadata,
+decision metadata, and approval retry helpers.
 
 ## CLI Commands
 
@@ -307,6 +315,9 @@ approval retry helpers.
 | `te traces ingest --data '<json>'` | Ingest or update a trace using a user API token or inference key |
 | `te policy-decisions list` | List AGT YAML policy decisions |
 | `te policy-decisions show <id>` | Show one policy decision with redacted context |
+| `te policy-templates list` | List curated AGT YAML policy templates |
+| `te policy-templates render <id> --params '<json>'` | Render disabled/shadow policy YAML from safe structured parameters |
+| `te policy-drafts generate --prompt '<text>'` | Generate an AI-assisted disabled/shadow draft for review and testing |
 | `te approvals list --status pending` | List policy approval requests |
 | `te approvals show <id>` | Show approval detail and retry metadata |
 | `te approvals approve <id>` | Approve a pending request |
@@ -447,6 +458,9 @@ All commands support `--json` for machine-readable output.
 | `create_trace` | Ingest a trace payload without secrets |
 | `list_policy_decisions` | List AGT YAML policy decisions |
 | `show_policy_decision` | Show one decision with redacted context |
+| `list_policy_templates` | List curated AGT YAML policy templates |
+| `render_policy_template` | Render disabled/shadow policy YAML from safe structured parameters |
+| `generate_policy_draft` | Generate an AI-assisted disabled/shadow draft; secret-looking prompts are refused |
 | `list_approvals` | List policy approval requests |
 | `show_approval` | Show one approval request |
 | `approve_approval` | Approve a pending request |

@@ -18,6 +18,7 @@ import { registerTenantCommands } from "./commands/tenant";
 import { registerApprovalCommands } from "./commands/approvals";
 import { registerTraceCommands } from "./commands/traces";
 import { registerPolicyDecisionCommands } from "./commands/policy-decisions";
+import { registerPolicyDraftCommands, registerPolicyTemplateCommands } from "./commands/policy-templates";
 import { registerOrchestrationCommands } from "./commands/orchestration";
 
 const program = new Command();
@@ -25,7 +26,7 @@ const program = new Command();
 program
   .name("te")
   .description("Tuning Engines CLI — fine-tune LLMs and browse the Marketplace from your terminal")
-  .version("0.4.6");
+  .version("0.4.7");
 
 // Lazy client initialization (only when a command actually needs it)
 const getClient = (): TuningEnginesClient => {
@@ -51,6 +52,8 @@ registerTenantCommands(program, getClient);
 registerApprovalCommands(program, getClient);
 registerTraceCommands(program, getClient);
 registerPolicyDecisionCommands(program, getClient);
+registerPolicyTemplateCommands(program, getClient);
+registerPolicyDraftCommands(program, getClient);
 registerOrchestrationCommands(program);
 
 // MCP server subcommand

@@ -263,6 +263,18 @@ class TuningEnginesClient {
     async getPolicyDecision(id) {
         return this.request("GET", `/api/v1/policy_decisions/${encodeURIComponent(id)}`);
     }
+    // --- Policy templates and drafts ---
+    async listPolicyTemplates() {
+        return this.request("GET", "/api/v1/policy_templates");
+    }
+    async renderPolicyTemplate(id, templateParams) {
+        return this.request("POST", `/api/v1/policy_templates/${encodeURIComponent(id)}/render`, {
+            template_params: templateParams || {},
+        });
+    }
+    async generatePolicyDraft(params) {
+        return this.request("POST", "/api/v1/policy_drafts/generate", params);
+    }
     // --- Approval requests ---
     async listApprovals(options) {
         const params = new URLSearchParams();
@@ -408,7 +420,7 @@ class TuningEnginesClient {
                     Authorization: `Bearer ${this.apiKey}`,
                     "Content-Type": "application/json",
                     Accept: "application/json",
-                    "User-Agent": "tuning-engines-cli/0.4.6",
+                    "User-Agent": "tuning-engines-cli/0.4.7",
                 },
             };
             const req = transport.request(options, (res) => {

@@ -396,6 +396,22 @@ export class TuningEnginesClient {
     return this.request("GET", `/api/v1/policy_decisions/${encodeURIComponent(id)}`);
   }
 
+  // --- Policy templates and drafts ---
+
+  async listPolicyTemplates(): Promise<any> {
+    return this.request("GET", "/api/v1/policy_templates");
+  }
+
+  async renderPolicyTemplate(id: string, templateParams?: Record<string, any>): Promise<any> {
+    return this.request("POST", `/api/v1/policy_templates/${encodeURIComponent(id)}/render`, {
+      template_params: templateParams || {},
+    });
+  }
+
+  async generatePolicyDraft(params: { prompt: string; scope?: string }): Promise<any> {
+    return this.request("POST", "/api/v1/policy_drafts/generate", params);
+  }
+
   // --- Approval requests ---
 
   async listApprovals(options?: { status?: string; limit?: number; offset?: number }): Promise<any> {
@@ -592,7 +608,7 @@ export class TuningEnginesClient {
           Authorization: `Bearer ${this.apiKey}`,
           "Content-Type": "application/json",
           Accept: "application/json",
-          "User-Agent": "tuning-engines-cli/0.4.6",
+          "User-Agent": "tuning-engines-cli/0.4.7",
         },
       };
 

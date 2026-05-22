@@ -165,6 +165,12 @@ export declare class TuningEnginesClient {
         offset?: number;
     }): Promise<any>;
     getPolicyDecision(id: string): Promise<any>;
+    listPolicyTemplates(): Promise<any>;
+    renderPolicyTemplate(id: string, templateParams?: Record<string, any>): Promise<any>;
+    generatePolicyDraft(params: {
+        prompt: string;
+        scope?: string;
+    }): Promise<any>;
     listApprovals(options?: {
         status?: string;
         limit?: number;

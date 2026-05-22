@@ -43,13 +43,23 @@ class TuningClient:
     def openai(self) -> OpenAI:
         return self.openai_client()
 
-    def openai_client(self, *, approval_id: str | None = None) -> OpenAI:
-        headers = {"X-TE-Approval-ID": approval_id} if approval_id else None
+    def openai_client(
+        self,
+        *,
+        approval_id: str | None = None,
+        request_id: str | None = None,
+        run_id: str | None = None,
+    ) -> OpenAI:
+        headers = {
+            "X-TE-Request-ID": request_id,
+            "X-TE-Run-ID": run_id or self.trace.run_id,
+            "X-TE-Approval-ID": approval_id,
+        }
         return OpenAI(
             api_key=self.api_key,
             base_url=self.inference_url,
             timeout=self.timeout,
-            default_headers=headers,
+            default_headers={k: v for k, v in headers.items() if v},
         )
 
     def request(
@@ -63,11 +73,22 @@ class TuningClient:
         headers: Mapping[str, str] | None = None,
     ) -> Any:
         url = f"{(base_url or self.api_url).rstrip('/')}/{path.lstrip('/')}"
-        span_id = self.trace.start(trace_type, {"method": method, "url": url})
+        body = dict(json or {})
+        body_metadata = body.get("metadata") if isinstance(body.get("metadata"), dict) else {}
+        request_id = str(body_metadata.get("request_id") or self.trace.new_request_id())
+        if body_metadata:
+            body["metadata"] = {
+                **body_metadata,
+                "run_id": body_metadata.get("run_id") or self.trace.run_id,
+                "agent_run_id": body_metadata.get("agent_run_id") or self.trace.run_id,
+                "request_id": request_id,
+            }
+        span_id = self.trace.start(trace_type, {"method": method, "url": url, "request_id": request_id})
         started = time.perf_counter()
         try:
-            with httpx.Client(timeout=self.timeout, headers=self._headers(headers)) as client:
-                response = client.request(method, url, json=json)
+            trace_headers = {"X-TE-Request-ID": request_id, "X-TE-Run-ID": self.trace.run_id, **dict(headers or {})}
+            with httpx.Client(timeout=self.timeout, headers=self._headers(trace_headers)) as client:
+                response = client.request(method, url, json=body if json is not None else None)
             payload = self._parse_response(response)
             self.trace.finish(
                 span_id,
@@ -92,11 +113,22 @@ class TuningClient:
         headers: Mapping[str, str] | None = None,
     ) -> Any:
         url = f"{(base_url or self.api_url).rstrip('/')}/{path.lstrip('/')}"
-        span_id = self.trace.start(trace_type, {"method": method, "url": url})
+        body = dict(json or {})
+        body_metadata = body.get("metadata") if isinstance(body.get("metadata"), dict) else {}
+        request_id = str(body_metadata.get("request_id") or self.trace.new_request_id())
+        if body_metadata:
+            body["metadata"] = {
+                **body_metadata,
+                "run_id": body_metadata.get("run_id") or self.trace.run_id,
+                "agent_run_id": body_metadata.get("agent_run_id") or self.trace.run_id,
+                "request_id": request_id,
+            }
+        span_id = self.trace.start(trace_type, {"method": method, "url": url, "request_id": request_id})
         started = time.perf_counter()
         try:
-            async with httpx.AsyncClient(timeout=self.timeout, headers=self._headers(headers)) as client:
-                response = await client.request(method, url, json=json)
+            trace_headers = {"X-TE-Request-ID": request_id, "X-TE-Run-ID": self.trace.run_id, **dict(headers or {})}
+            async with httpx.AsyncClient(timeout=self.timeout, headers=self._headers(trace_headers)) as client:
+                response = await client.request(method, url, json=body if json is not None else None)
             payload = self._parse_response(response)
             self.trace.finish(
                 span_id,
@@ -118,10 +150,23 @@ class TuningClient:
         approval_id: str | None = None,
         **kwargs: Any,
     ) -> Any:
-        span_id = self.trace.start("llm", {"model": model})
+        request_id = self.trace.new_request_id()
+        call_metadata = {
+            **dict(kwargs.get("metadata") or {}),
+            "run_id": self.trace.run_id,
+            "agent_run_id": self.trace.run_id,
+            "request_id": request_id,
+            "event_type": "model.call",
+        }
+        span_id = self.trace.start("model.call", {"model": model, "request_id": request_id})
         try:
             clean_kwargs = {key: value for key, value in kwargs.items() if value is not None}
-            response = self.openai_client(approval_id=approval_id).chat.completions.create(
+            clean_kwargs["metadata"] = call_metadata
+            response = self.openai_client(
+                approval_id=approval_id,
+                request_id=request_id,
+                run_id=self.trace.run_id,
+            ).chat.completions.create(
                 model=model,
                 messages=messages,
                 **clean_kwargs,
@@ -131,6 +176,7 @@ class TuningClient:
                 span_id,
                 {
                     "model": getattr(response, "model", model),
+                    "request_id": request_id,
                     "usage": usage.model_dump() if hasattr(usage, "model_dump") else usage,
                 },
             )
@@ -214,7 +260,16 @@ class TuningClient:
             "POST",
             f"/v1/agents/{agent_name}/message",
             base_url=self.inference_url.removesuffix("/v1"),
-            json={"message": message, "context": dict(context or {})},
+            json={
+                "message": message,
+                "context": dict(context or {}),
+                "metadata": {
+                    "run_id": self.trace.run_id,
+                    "agent_run_id": self.trace.run_id,
+                    "request_id": self.trace.new_request_id(),
+                    "event_type": "agent.message",
+                },
+            },
             trace_type="agent",
             headers={"X-TE-Approval-ID": approval_id} if approval_id else None,
         )
@@ -231,7 +286,16 @@ class TuningClient:
             "POST",
             f"/v1/agents/{agent_name}/message",
             base_url=self.inference_url.removesuffix("/v1"),
-            json={"message": message, "context": dict(context or {})},
+            json={
+                "message": message,
+                "context": dict(context or {}),
+                "metadata": {
+                    "run_id": self.trace.run_id,
+                    "agent_run_id": self.trace.run_id,
+                    "request_id": self.trace.new_request_id(),
+                    "event_type": "agent.message",
+                },
+            },
             trace_type="agent",
             headers={"X-TE-Approval-ID": approval_id} if approval_id else None,
         )
@@ -255,6 +319,12 @@ class TuningClient:
                 "server_name": server_name,
                 "tool_name": tool_name,
                 "arguments": dict(arguments or {}),
+                "metadata": {
+                    "run_id": self.trace.run_id,
+                    "agent_run_id": self.trace.run_id,
+                    "request_id": self.trace.new_request_id(),
+                    "event_type": "mcp.tool_call",
+                },
             },
             trace_type="mcp",
             headers={"X-TE-Approval-ID": approval_id} if approval_id else None,
@@ -276,6 +346,12 @@ class TuningClient:
                 "server_name": server_name,
                 "tool_name": tool_name,
                 "arguments": dict(arguments or {}),
+                "metadata": {
+                    "run_id": self.trace.run_id,
+                    "agent_run_id": self.trace.run_id,
+                    "request_id": self.trace.new_request_id(),
+                    "event_type": "mcp.tool_call",
+                },
             },
             trace_type="mcp",
             headers={"X-TE-Approval-ID": approval_id} if approval_id else None,
