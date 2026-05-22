@@ -36,13 +36,31 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerOrchestrationCommands = registerOrchestrationCommands;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
-const FRAMEWORKS = ["langgraph", "temporal", "inngest", "triggerdev", "hatchet"];
+const FRAMEWORKS = [
+    "langgraph",
+    "temporal",
+    "inngest",
+    "triggerdev",
+    "hatchet",
+    "restate",
+    "dbos",
+    "dapr",
+    "prefect",
+    "dagster",
+    "airflow",
+];
 const FRAMEWORK_LABELS = {
     langgraph: "LangGraph",
     temporal: "Temporal",
     inngest: "Inngest",
     triggerdev: "Trigger.dev",
     hatchet: "Hatchet",
+    restate: "Restate",
+    dbos: "DBOS",
+    dapr: "Dapr Workflow",
+    prefect: "Prefect",
+    dagster: "Dagster",
+    airflow: "Airflow",
 };
 function registerOrchestrationCommands(program) {
     const orchestration = program
@@ -89,6 +107,18 @@ function filesFor(framework) {
             return nodeStarterFiles(framework, triggerdevSource(), "trigger/governed-ai.ts");
         case "hatchet":
             return nodeStarterFilesWithHatchet(framework, hatchetSource(), "src/workflows/tuning-engines-workflow.ts");
+        case "restate":
+            return nodeStarterFiles(framework, restateSource(), "src/restate-service.ts");
+        case "dbos":
+            return nodeStarterFiles(framework, dbosSource(), "src/workflow.ts");
+        case "dapr":
+            return nodeStarterFiles(framework, daprSource(), "src/workflow.ts");
+        case "prefect":
+            return pythonWorkflowFiles(framework, prefectSource());
+        case "dagster":
+            return pythonWorkflowFiles(framework, dagsterSource(), "definitions.py");
+        case "airflow":
+            return pythonWorkflowFiles(framework, airflowSource(), "dags/tuning_engines_dag.py");
     }
 }
 function sharedReadme(framework) {
@@ -430,6 +460,12 @@ function nodePackageJson(framework) {
         deps["@trigger.dev/sdk"] = "^4.0.0";
     if (framework === "hatchet")
         deps["@hatchet-dev/typescript-sdk"] = "^1.22.0";
+    if (framework === "restate")
+        deps["@restatedev/restate-sdk"] = "^1.14.4";
+    if (framework === "dbos")
+        deps["@dbos-inc/dbos-sdk"] = "^4.0.0";
+    if (framework === "dapr")
+        deps["@dapr/dapr"] = "^3.5.0";
     return `${JSON.stringify({
         name: `tuning-engines-${framework}-starter`,
         private: true,
@@ -461,6 +497,48 @@ function nodeTsconfig() {
     }, null, 2)}
 `;
 }
+function pythonWorkflowFiles(framework, source, entrypointPath = "workflow.py") {
+    const helperPath = framework === "airflow" ? "dags/tuning_engines_client.py" : "tuning_engines_client.py";
+    return {
+        "README.md": pythonReadme(framework, entrypointPath, helperPath),
+        ".env.example": envExample(framework),
+        "requirements.txt": pythonRequirements(framework),
+        "tuning-registry.yml": registryManifest(framework),
+        [helperPath]: tuningEnginesPythonHelper(),
+        [entrypointPath]: source,
+    };
+}
+function pythonReadme(framework, entrypointPath, helperPath) {
+    const label = FRAMEWORK_LABELS[framework];
+    return sharedReadme(framework) + `
+## Install
+
+\`\`\`bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+\`\`\`
+
+## Generated files
+
+- \`${entrypointPath}\`: ${label} workflow example.
+- \`${helperPath}\`: small helper for governed model calls, trace ingest, approvals, and state references.
+- \`tuning-registry.yml\`: manifest skeleton for registry sync.
+
+Run the workflow using the normal ${label} development flow for your app.
+`;
+}
+function pythonRequirements(framework) {
+    const lines = ["httpx>=0.27"];
+    if (framework === "prefect")
+        lines.push("prefect>=3.0");
+    if (framework === "dagster")
+        lines.push("dagster>=1.8");
+    if (framework === "airflow")
+        lines.push("apache-airflow>=2.10");
+    return `${lines.join("\n")}\n`;
+}
 function envExample(framework) {
     const extra = framework === "temporal"
         ? `TEMPORAL_ADDRESS=localhost:7233
@@ -473,11 +551,15 @@ HATCHET_CLIENT_HOST_PORT=localhost:7077
             : framework === "triggerdev"
                 ? `TRIGGER_SECRET_KEY=tr_dev_your-trigger-secret
 `
-                : framework === "inngest"
-                    ? `INNGEST_EVENT_KEY=local
+                : framework === "dapr"
+                    ? `DAPR_HOST=127.0.0.1
+DAPR_HTTP_PORT=3500
+`
+                    : framework === "inngest"
+                        ? `INNGEST_EVENT_KEY=local
 INNGEST_SIGNING_KEY=local
 `
-                    : "";
+                        : "";
     return `TE_INFERENCE_KEY=sk-te-your-inference-key
 TE_API_URL=https://app.tuningengines.com
 TE_INFERENCE_URL=https://api.tuningengines.com/v1
@@ -1046,5 +1128,465 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
 }
 function nodeStarterFilesWithHatchet(framework, entrypoint, entrypointPath = "src/workflow.ts") {
     return { ...nodeStarterFiles(framework, entrypoint, entrypointPath), ...hatchetExtraFiles() };
+}
+function restateSource() {
+    return `import * as restate from "@restatedev/restate-sdk";
+import { chat, emitTrace, newId, upsertStateReference } from "./tuning-engines.js";
+
+type Input = {
+  prompt?: string;
+  run_id?: string;
+  approval_id?: string;
+};
+
+export default restate.service({
+  name: "TuningEnginesService",
+  handlers: {
+    async governedAi(ctx: any, input: Input) {
+      const run_id = input.run_id || "restate_" + newId("run");
+      const request_id = newId("req");
+      const prompt = input.prompt || "Say hello from a governed Restate service.";
+
+      await upsertStateReference({
+        reference_type: "external_context",
+        runtime: "restate",
+        provider: "restate",
+        external_id: run_id,
+        run_id,
+        request_id,
+        status: "active",
+        metadata: {
+          service: "TuningEnginesService",
+          handler: "governedAi",
+        },
+      });
+
+      const response = await chat({
+        messages: [{ role: "user", content: prompt }],
+        approvalId: input.approval_id,
+        metadata: {
+          run_id,
+          request_id,
+          runtime: "restate",
+          resource_type: "model",
+          resource_name: "governed-model",
+        },
+      });
+
+      await emitTrace({
+        runId: run_id,
+        name: "restate-governed-ai",
+        runtime: "restate",
+        status: "succeeded",
+        events: [
+          {
+            id: newId("evt"),
+            type: "workflow.step",
+            status: "succeeded",
+            metadata: {
+              run_id,
+              request_id,
+              resource_type: "restate_handler",
+              resource_name: "TuningEnginesService/governedAi",
+            },
+          },
+        ],
+      });
+
+      return { run_id, response };
+    },
+  },
+});
+`;
+}
+function dbosSource() {
+    return `import { DBOS } from "@dbos-inc/dbos-sdk";
+import { chat, emitTrace, newId, upsertStateReference } from "./tuning-engines.js";
+
+type Input = {
+  prompt?: string;
+  run_id?: string;
+  approval_id?: string;
+};
+
+async function governedAiWorkflow(input: Input) {
+  const run_id = input.run_id || newId("dbos");
+  const request_id = newId("req");
+  const prompt = input.prompt || "Say hello from a governed DBOS workflow.";
+
+  await DBOS.runStep(
+    async () =>
+      upsertStateReference({
+        reference_type: "external_context",
+        runtime: "dbos",
+        provider: "dbos",
+        external_id: run_id,
+        run_id,
+        request_id,
+        status: "active",
+        metadata: {
+          workflow_name: "governedAiWorkflow",
+        },
+      }),
+    { name: "link-tuning-engines-state" },
+  );
+
+  const response = await DBOS.runStep(
+    async () =>
+      chat({
+        messages: [{ role: "user", content: prompt }],
+        approvalId: input.approval_id,
+        metadata: {
+          run_id,
+          request_id,
+          runtime: "dbos",
+          resource_type: "model",
+          resource_name: "governed-model",
+        },
+      }),
+    { name: "governed-model-call" },
+  );
+
+  await DBOS.runStep(
+    async () =>
+      emitTrace({
+        runId: run_id,
+        name: "dbos-governed-ai",
+        runtime: "dbos",
+        status: "succeeded",
+        events: [
+          {
+            id: newId("evt"),
+            type: "workflow.step",
+            status: "succeeded",
+            metadata: {
+              run_id,
+              request_id,
+              resource_type: "dbos_workflow",
+              resource_name: "governedAiWorkflow",
+            },
+          },
+        ],
+      }),
+    { name: "flush-tuning-engines-trace" },
+  );
+
+  return { run_id, response };
+}
+
+export const workflow = DBOS.registerWorkflow(governedAiWorkflow, {
+  name: "tuningEnginesGovernedAi",
+});
+`;
+}
+function daprSource() {
+    return `import { Task, WorkflowActivityContext, WorkflowContext, WorkflowRuntime } from "@dapr/dapr";
+import { chat, emitTrace, newId, upsertStateReference } from "./tuning-engines.js";
+
+type Input = {
+  prompt?: string;
+  run_id?: string;
+  approval_id?: string;
+};
+
+type GovernedResult = {
+  run_id: string;
+  response: unknown;
+};
+
+async function governedModelActivity(_ctx: WorkflowActivityContext, input: Input): Promise<GovernedResult> {
+  const run_id = input.run_id || newId("dapr");
+  const request_id = newId("req");
+  const prompt = input.prompt || "Say hello from a governed Dapr Workflow.";
+
+  await upsertStateReference({
+    reference_type: "external_context",
+    runtime: "dapr",
+    provider: "dapr",
+    external_id: run_id,
+    run_id,
+    request_id,
+    status: "active",
+    metadata: {
+      workflow_name: "tuning-engines-governed-ai",
+      activity_name: "governedModelActivity",
+    },
+  });
+
+  const response = await chat({
+    messages: [{ role: "user", content: prompt }],
+    approvalId: input.approval_id,
+    metadata: {
+      run_id,
+      request_id,
+      runtime: "dapr",
+      resource_type: "model",
+      resource_name: "governed-model",
+    },
+  });
+
+  await emitTrace({
+    runId: run_id,
+    name: "dapr-governed-ai",
+    runtime: "dapr",
+    status: "succeeded",
+    events: [
+      {
+        id: newId("evt"),
+        type: "workflow.step",
+        status: "succeeded",
+        metadata: {
+          run_id,
+          request_id,
+          resource_type: "dapr_activity",
+          resource_name: "governedModelActivity",
+        },
+      },
+    ],
+  });
+
+  return { run_id, response };
+}
+
+function* governedWorkflow(
+  ctx: WorkflowContext,
+  input: Input,
+): Generator<Task<GovernedResult>, GovernedResult, GovernedResult> {
+  const result: GovernedResult = yield ctx.callActivity("governedModelActivity", input) as Task<GovernedResult>;
+  return result;
+}
+
+const runtime = new WorkflowRuntime();
+runtime.registerWorkflowWithName("tuning-engines-governed-ai", governedWorkflow);
+runtime.registerActivityWithName("governedModelActivity", governedModelActivity);
+
+await runtime.start();
+`;
+}
+function tuningEnginesPythonHelper() {
+    return `import os
+import time
+import uuid
+from typing import Any
+
+import httpx
+
+
+TE_API_URL = os.getenv("TE_API_URL", "https://app.tuningengines.com").rstrip("/")
+TE_INFERENCE_URL = os.getenv("TE_INFERENCE_URL", "https://api.tuningengines.com/v1").rstrip("/")
+TE_INFERENCE_KEY = os.getenv("TE_INFERENCE_KEY") or os.getenv("TE_API_KEY")
+TE_MODEL = os.getenv("TE_MODEL", "auto")
+
+
+def new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex}"
+
+
+def _headers(extra: dict[str, str] | None = None) -> dict[str, str]:
+    if not TE_INFERENCE_KEY:
+        raise RuntimeError("Set TE_INFERENCE_KEY before running this starter.")
+    headers = {
+        "Authorization": f"Bearer {TE_INFERENCE_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    headers.update(extra or {})
+    return headers
+
+
+def chat(prompt: str, *, run_id: str, request_id: str, runtime: str, approval_id: str | None = None) -> Any:
+    headers = _headers({"X-TE-Run-ID": run_id, "X-TE-Request-ID": request_id})
+    if approval_id:
+        headers["X-TE-Approval-ID"] = approval_id
+    response = httpx.post(
+        f"{TE_INFERENCE_URL}/chat/completions",
+        headers=headers,
+        timeout=60,
+        json={
+            "model": TE_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "metadata": {
+                "run_id": run_id,
+                "agent_run_id": run_id,
+                "request_id": request_id,
+                "runtime": runtime,
+                "event_type": "model.call",
+            },
+        },
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def emit_trace(*, run_id: str, runtime: str, name: str, status: str, events: list[dict[str, Any]]) -> Any:
+    response = httpx.post(
+        f"{TE_API_URL}/api/v1/traces",
+        headers=_headers(),
+        timeout=30,
+        json={
+            "run_id": run_id,
+            "runtime": runtime,
+            "name": name,
+            "status": status,
+            "events": events,
+        },
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def upsert_state_reference(reference: dict[str, Any]) -> Any:
+    response = httpx.post(
+        f"{TE_API_URL}/api/v1/runtime_state_references",
+        headers=_headers(),
+        timeout=30,
+        json={"runtime_state_reference": reference},
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def workflow_event(*, run_id: str, request_id: str, runtime: str, resource_type: str, resource_name: str) -> dict[str, Any]:
+    return {
+        "id": new_id("evt"),
+        "type": "workflow.step",
+        "status": "succeeded",
+        "at": time.time(),
+        "metadata": {
+            "run_id": run_id,
+            "request_id": request_id,
+            "runtime": runtime,
+            "resource_type": resource_type,
+            "resource_name": resource_name,
+        },
+    }
+`;
+}
+function prefectSource() {
+    return `from prefect import flow, task
+
+from tuning_engines_client import chat, emit_trace, new_id, upsert_state_reference, workflow_event
+
+
+@task(retries=2, retry_delay_seconds=5)
+def governed_model_task(prompt: str, run_id: str | None = None, approval_id: str | None = None):
+    run_id = run_id or new_id("prefect")
+    request_id = new_id("req")
+    upsert_state_reference({
+        "reference_type": "external_context",
+        "runtime": "prefect",
+        "provider": "prefect",
+        "external_id": run_id,
+        "run_id": run_id,
+        "request_id": request_id,
+        "status": "active",
+        "metadata": {"flow": "tuning_engines_governed_ai"},
+    })
+    response = chat(prompt, run_id=run_id, request_id=request_id, runtime="prefect", approval_id=approval_id)
+    emit_trace(
+        run_id=run_id,
+        runtime="prefect",
+        name="prefect-governed-ai",
+        status="succeeded",
+        events=[workflow_event(run_id=run_id, request_id=request_id, runtime="prefect", resource_type="prefect_task", resource_name="governed_model_task")],
+    )
+    return {"run_id": run_id, "response": response}
+
+
+@flow(name="tuning-engines-governed-ai")
+def governed_ai_flow(prompt: str = "Say hello from a governed Prefect flow."):
+    return governed_model_task(prompt)
+
+
+if __name__ == "__main__":
+    print(governed_ai_flow())
+`;
+}
+function dagsterSource() {
+    return `from dagster import Definitions, asset
+
+from tuning_engines_client import chat, emit_trace, new_id, upsert_state_reference, workflow_event
+
+
+@asset
+def tuning_engines_governed_ai():
+    run_id = new_id("dagster")
+    request_id = new_id("req")
+    upsert_state_reference({
+        "reference_type": "external_context",
+        "runtime": "dagster",
+        "provider": "dagster",
+        "external_id": run_id,
+        "run_id": run_id,
+        "request_id": request_id,
+        "status": "active",
+        "metadata": {"asset": "tuning_engines_governed_ai"},
+    })
+    response = chat(
+        "Say hello from a governed Dagster asset.",
+        run_id=run_id,
+        request_id=request_id,
+        runtime="dagster",
+    )
+    emit_trace(
+        run_id=run_id,
+        runtime="dagster",
+        name="dagster-governed-ai",
+        status="succeeded",
+        events=[workflow_event(run_id=run_id, request_id=request_id, runtime="dagster", resource_type="dagster_asset", resource_name="tuning_engines_governed_ai")],
+    )
+    return {"run_id": run_id, "response": response}
+
+
+defs = Definitions(assets=[tuning_engines_governed_ai])
+`;
+}
+function airflowSource() {
+    return `from __future__ import annotations
+
+from datetime import datetime
+
+from airflow.decorators import dag, task
+
+from tuning_engines_client import chat, emit_trace, new_id, upsert_state_reference, workflow_event
+
+
+@dag(
+    dag_id="tuning_engines_governed_ai",
+    start_date=datetime(2026, 1, 1),
+    schedule=None,
+    catchup=False,
+    tags=["ai", "tuning-engines"],
+)
+def tuning_engines_governed_ai():
+    @task(retries=2)
+    def governed_model_call(prompt: str = "Say hello from a governed Airflow DAG."):
+        run_id = new_id("airflow")
+        request_id = new_id("req")
+        upsert_state_reference({
+            "reference_type": "external_context",
+            "runtime": "airflow",
+            "provider": "airflow",
+            "external_id": run_id,
+            "run_id": run_id,
+            "request_id": request_id,
+            "status": "active",
+            "metadata": {"dag_id": "tuning_engines_governed_ai", "task_id": "governed_model_call"},
+        })
+        response = chat(prompt, run_id=run_id, request_id=request_id, runtime="airflow")
+        emit_trace(
+            run_id=run_id,
+            runtime="airflow",
+            name="airflow-governed-ai",
+            status="succeeded",
+            events=[workflow_event(run_id=run_id, request_id=request_id, runtime="airflow", resource_type="airflow_task", resource_name="governed_model_call")],
+        )
+        return {"run_id": run_id, "response": response}
+
+    governed_model_call()
+
+
+tuning_engines_governed_ai()
+`;
 }
 //# sourceMappingURL=orchestration.js.map
