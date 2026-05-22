@@ -27,6 +27,7 @@
   },
   "files": [
     "dist",
+    "docs",
     "scripts/smoke",
     "packages/tuning-agents",
     "!**/__pycache__/**",

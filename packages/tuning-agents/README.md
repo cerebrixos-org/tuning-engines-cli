@@ -18,6 +18,10 @@ Tuning Engines for the things it already does well:
 - Client-side causal traces for LLM calls, MCP calls, LangGraph runs, and
   Temporal activities
 
+For raw OpenAI-compatible clients such as OpenCode, direct Temporal Activities,
+and OpenAI SDK integrations, see
+[Unified API Endpoint](../../docs/unified-api-endpoint.md).
+
 ## Install
 
 ```bash
