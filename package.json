@@ -36,7 +36,7 @@
   "mcpName": "io.github.cerebrixos/tuning-engines",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cerebrixos-org/tuning-engines-cli.git"
+    "url": "git+https://github.com/cerebrixos-org/tuning-engines-cli.git"
   },
   "keywords": [
     "mcp",
