@@ -59,4 +59,17 @@ export function registerInferenceCommands(
         process.exit(1);
       }
     });
+
+  inference
+    .command("token")
+    .description("Exchange an inference key (sk-te-...) for a short-lived inference JWT")
+    .option("--json", "Output as JSON")
+    .action(async () => {
+      try {
+        printResult(await getClient().getInferenceToken());
+      } catch (err: any) {
+        console.error(err.message);
+        process.exit(1);
+      }
+    });
 }

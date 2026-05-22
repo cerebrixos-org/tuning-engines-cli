@@ -100,7 +100,9 @@ te orchestration init temporal
 
 ## MCP Server Setup
 
-The CLI includes a built-in MCP server with 35+ tools. Any AI assistant that supports MCP can fine-tune models, manage training jobs, run evaluations, check inference usage, and manage datasets through natural language.
+The CLI includes a built-in MCP server with 60+ tools. Any AI assistant that supports MCP can fine-tune models, manage training jobs, run evaluations, check inference usage, inspect traces, review approvals, and manage non-secret tenant registry metadata through natural language.
+
+For security, the MCP server intentionally does not expose internal proxy routes. It also refuses MCP-side inference-key creation and raw secret-bearing mutation fields. Use the CLI or web UI for workflows that intentionally create one-time keys or submit raw provider secrets.
 
 ### Claude Desktop
 
@@ -294,6 +296,7 @@ approval retry helpers.
 | `te inference models` | List available inference models |
 | `te inference usage` | Show inference API usage stats |
 | `te inference jwt` | Get a JWT for direct API access |
+| `te inference token` | Exchange an inference key (`sk-te-...`) for a short-lived inference JWT |
 
 ### Runtime Traces and Approvals
 
@@ -301,6 +304,9 @@ approval retry helpers.
 |---------|-------------|
 | `te traces list` | List LangGraph, Temporal, and custom runtime traces |
 | `te traces show <run-id>` | Show one trace, including events, policy decisions, and approvals when linked |
+| `te traces ingest --data '<json>'` | Ingest or update a trace using a user API token or inference key |
+| `te policy-decisions list` | List AGT YAML policy decisions |
+| `te policy-decisions show <id>` | Show one policy decision with redacted context |
 | `te approvals list --status pending` | List policy approval requests |
 | `te approvals show <id>` | Show approval detail and retry metadata |
 | `te approvals approve <id>` | Approve a pending request |
@@ -430,6 +436,44 @@ All commands support `--json` for machine-readable output.
 | `list_inference_models` | Models available for inference |
 | `inference_usage` | Inference API usage statistics |
 | `get_inference_jwt` | Get JWT token for direct API access |
+| `get_inference_token` | Exchange an inference key for a short-lived inference JWT |
+
+### Runtime, Policy, and Approvals
+
+| Tool | Description |
+|------|-------------|
+| `list_traces` | List runtime traces |
+| `show_trace` | Show a trace with linked events, policy decisions, and approvals |
+| `create_trace` | Ingest a trace payload without secrets |
+| `list_policy_decisions` | List AGT YAML policy decisions |
+| `show_policy_decision` | Show one decision with redacted context |
+| `list_approvals` | List policy approval requests |
+| `show_approval` | Show one approval request |
+| `approve_approval` | Approve a pending request |
+| `deny_approval` | Deny a pending request |
+
+### Tenant Admin MCP Tools
+
+These tools require a tenant owner/admin API token. The MCP server refuses internal
+proxy routes, inference-key creation, and raw secret-bearing mutation fields.
+
+| Tool | Description |
+|------|-------------|
+| `list_tenant_resources` | List allowlisted tenant resource names |
+| `tenant_resource_list` | List models, roles, policies, MCP servers, agents, skills, credential sources, and related metadata |
+| `tenant_resource_show` | Show one resource without returning stored secrets |
+| `tenant_resource_create` | Create non-secret tenant registry/config metadata |
+| `tenant_resource_update` | Update non-secret tenant registry/config metadata |
+| `tenant_resource_delete` | Delete or revoke a tenant resource |
+| `test_governance_policy` | Dry-run an AGT YAML governance policy |
+| `tenant_team_list` | List members, invitations, and allowed domains |
+| `tenant_team_invite` | Invite a user without returning invitation tokens |
+| `tenant_team_set_inference_role` | Assign or clear an inference role |
+| `tenant_team_disable` / `tenant_team_enable` | Disable or re-enable a member |
+| `tenant_team_remove` | Remove a tenant member |
+| `tenant_invitation_cancel` | Cancel a pending invitation |
+| `tenant_domains_update` | Replace allowed email domains |
+| `inference_capture_show` / `inference_capture_update` | Manage request-capture settings using credential-source references |
 
 ### Agents
 

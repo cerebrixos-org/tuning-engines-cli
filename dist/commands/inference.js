@@ -88,5 +88,18 @@ function registerInferenceCommands(program, getClient) {
             process.exit(1);
         }
     });
+    inference
+        .command("token")
+        .description("Exchange an inference key (sk-te-...) for a short-lived inference JWT")
+        .option("--json", "Output as JSON")
+        .action(async () => {
+        try {
+            printResult(await getClient().getInferenceToken());
+        }
+        catch (err) {
+            console.error(err.message);
+            process.exit(1);
+        }
+    });
 }
 //# sourceMappingURL=inference.js.map

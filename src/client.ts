@@ -337,6 +337,10 @@ export class TuningEnginesClient {
     return this.request("POST", "/api/v1/inference/jwt");
   }
 
+  async getInferenceToken(): Promise<any> {
+    return this.request("POST", "/api/v1/inference/token");
+  }
+
   // --- Agents ---
 
   async listAgents(): Promise<any> {
@@ -359,6 +363,37 @@ export class TuningEnginesClient {
 
   async getTrace(runId: string): Promise<any> {
     return this.request("GET", `/api/v1/traces/${encodeURIComponent(runId)}`);
+  }
+
+  async createTrace(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/traces", params);
+  }
+
+  // --- Policy decisions ---
+
+  async listPolicyDecisions(options?: {
+    decision_action?: string;
+    policy_action?: string;
+    evaluation_mode?: string;
+    run_id?: string;
+    request_id?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.decision_action) params.set("decision_action", options.decision_action);
+    if (options?.policy_action) params.set("policy_action", options.policy_action);
+    if (options?.evaluation_mode) params.set("evaluation_mode", options.evaluation_mode);
+    if (options?.run_id) params.set("run_id", options.run_id);
+    if (options?.request_id) params.set("request_id", options.request_id);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/policy_decisions${qs ? `?${qs}` : ""}`);
+  }
+
+  async getPolicyDecision(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/policy_decisions/${encodeURIComponent(id)}`);
   }
 
   // --- Approval requests ---
@@ -494,7 +529,7 @@ export class TuningEnginesClient {
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
-          "User-Agent": "tuning-engines-cli/0.3.5",
+          "User-Agent": "tuning-engines-cli/0.4.6",
         },
       };
 
@@ -557,7 +592,7 @@ export class TuningEnginesClient {
           Authorization: `Bearer ${this.apiKey}`,
           "Content-Type": "application/json",
           Accept: "application/json",
-          "User-Agent": "tuning-engines-cli/0.3.5",
+          "User-Agent": "tuning-engines-cli/0.4.6",
         },
       };
 

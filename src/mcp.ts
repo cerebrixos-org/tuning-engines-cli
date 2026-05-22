@@ -7,6 +7,373 @@ import {
 import { TuningEnginesClient } from "./client";
 import { getApiKey, getApiUrl } from "./config";
 
+type ToolDefinition = {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+};
+
+const TENANT_RESOURCE_NAMES = [
+  "inference_keys",
+  "inference_roles",
+  "model_deployments",
+  "routing_profiles",
+  "guardrail_policies",
+  "governance_policies",
+  "mcp_servers",
+  "tenant_agents",
+  "tenant_skills",
+  "credential_sources",
+] as const;
+
+const MCP_BLOCKED_CREATE_RESOURCE_NAMES = new Set<string>(["inference_keys"]);
+const BLOCKED_SECRET_FIELD_NAMES = new Set<string>([
+  "api_key",
+  "api_key_encrypted",
+  "s3_access_key_id",
+  "s3_secret_access_key",
+  "github_token",
+  "token",
+  "access_token",
+  "refresh_token",
+  "password",
+  "private_key",
+  "client_secret",
+  "secret",
+]);
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function assertTenantResourceName(resource: unknown): string {
+  const name = String(resource || "");
+  if (!TENANT_RESOURCE_NAMES.includes(name as any)) {
+    throw new Error(`Unknown tenant resource '${name}'. Allowed resources: ${TENANT_RESOURCE_NAMES.join(", ")}`);
+  }
+  return name;
+}
+
+function hasBlockedSecretField(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some((item) => hasBlockedSecretField(item));
+  if (!isRecord(value)) return false;
+
+  return Object.entries(value).some(([key, nested]) => {
+    const normalized = key.toLowerCase();
+    if (BLOCKED_SECRET_FIELD_NAMES.has(normalized)) return true;
+    return hasBlockedSecretField(nested);
+  });
+}
+
+function assertSafeMcpMutation(resource: string, data?: unknown): void {
+  if (MCP_BLOCKED_CREATE_RESOURCE_NAMES.has(resource)) {
+    throw new Error(
+      "MCP refuses to create inference keys because the API returns a one-time raw key. Use the CLI or web UI for key creation."
+    );
+  }
+
+  if (data && hasBlockedSecretField(data)) {
+    throw new Error(
+      "MCP refuses raw secret-bearing fields. Use credential_source_id references, the CLI, or the web UI for secret setup."
+    );
+  }
+}
+
+function parseDataObject(data: unknown, fieldName = "data"): Record<string, any> {
+  if (typeof data === "string") {
+    const parsed = JSON.parse(data);
+    if (!isRecord(parsed)) throw new Error(`${fieldName} must be a JSON object`);
+    return parsed;
+  }
+  if (!isRecord(data)) throw new Error(`${fieldName} must be an object`);
+  return data;
+}
+
+function runtimeAndGovernanceTools(): ToolDefinition[] {
+  return [
+    {
+      name: "list_traces",
+      description: "List runtime traces emitted by LangGraph, Temporal, MCP, skills, agents, or custom runtimes. Requires a tenant user API token.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          limit: { type: "number", description: "Max results (default 50)" },
+          offset: { type: "number", description: "Offset (default 0)" },
+        },
+      },
+    },
+    {
+      name: "show_trace",
+      description: "Show one runtime trace by run_id, including events, policy decisions, and approvals when linked.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          run_id: { type: "string", description: "Runtime run_id" },
+        },
+        required: ["run_id"],
+      },
+    },
+    {
+      name: "create_trace",
+      description: "Ingest or update a runtime trace. Do not include secrets in trace metadata or event metadata. Works with a user API token or inference key.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          data: {
+            type: "object",
+            description: "Trace payload: run_id, name, runtime, status, metadata, events",
+            additionalProperties: true,
+          },
+        },
+        required: ["data"],
+      },
+    },
+    {
+      name: "list_policy_decisions",
+      description: "List AGT YAML policy decisions for the current tenant. Requires tenant owner/admin API token.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          decision_action: { type: "string", description: "allow, deny, audit, or needs_approval" },
+          policy_action: { type: "string", description: "Alias for decision_action" },
+          evaluation_mode: { type: "string", description: "enforce or shadow" },
+          run_id: { type: "string", description: "Filter by run_id" },
+          request_id: { type: "string", description: "Filter by request_id" },
+          limit: { type: "number", description: "Max results (default 50)" },
+          offset: { type: "number", description: "Offset (default 0)" },
+        },
+      },
+    },
+    {
+      name: "show_policy_decision",
+      description: "Show one policy decision with redacted context and metadata. Requires tenant owner/admin API token.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Policy decision ID" },
+        },
+        required: ["id"],
+      },
+    },
+    {
+      name: "list_approvals",
+      description: "List policy approval requests for the current tenant. Requires tenant owner/admin API token.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string", description: "pending, approved, denied, or expired" },
+          limit: { type: "number", description: "Max results (default 50)" },
+          offset: { type: "number", description: "Offset (default 0)" },
+        },
+      },
+    },
+    {
+      name: "show_approval",
+      description: "Show one policy approval request with redacted context. Requires tenant owner/admin API token.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Approval request ID" },
+        },
+        required: ["id"],
+      },
+    },
+    {
+      name: "approve_approval",
+      description: "Approve a pending policy approval request. Requires tenant owner/admin API token.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Approval request ID" },
+        },
+        required: ["id"],
+      },
+    },
+    {
+      name: "deny_approval",
+      description: "Deny a pending policy approval request. Requires tenant owner/admin API token.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Approval request ID" },
+        },
+        required: ["id"],
+      },
+    },
+    {
+      name: "list_tenant_resources",
+      description: "List tenant-admin resource names available through the public API. Internal proxy routes are intentionally not exposed.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "tenant_resource_list",
+      description: "List an allowlisted tenant resource. Requires tenant owner/admin API token.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          resource: { type: "string", enum: [...TENANT_RESOURCE_NAMES], description: "Tenant resource name" },
+          limit: { type: "number", description: "Max results (default 50)" },
+          offset: { type: "number", description: "Offset (default 0)" },
+        },
+        required: ["resource"],
+      },
+    },
+    {
+      name: "tenant_resource_show",
+      description: "Show one allowlisted tenant resource. Secret values are not returned by the API.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          resource: { type: "string", enum: [...TENANT_RESOURCE_NAMES], description: "Tenant resource name" },
+          id: { type: "string", description: "Resource ID" },
+        },
+        required: ["resource", "id"],
+      },
+    },
+    {
+      name: "tenant_resource_create",
+      description: "Create an allowlisted tenant resource using non-secret JSON. MCP refuses raw secret fields and inference-key creation; use CLI/web UI for those.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          resource: { type: "string", enum: [...TENANT_RESOURCE_NAMES], description: "Tenant resource name" },
+          data: { type: "object", additionalProperties: true, description: "Resource attributes. Use credential_source_id instead of raw secrets." },
+        },
+        required: ["resource", "data"],
+      },
+    },
+    {
+      name: "tenant_resource_update",
+      description: "Update an allowlisted tenant resource using non-secret JSON. MCP refuses raw secret fields; use CLI/web UI for secret updates.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          resource: { type: "string", enum: [...TENANT_RESOURCE_NAMES], description: "Tenant resource name" },
+          id: { type: "string", description: "Resource ID" },
+          data: { type: "object", additionalProperties: true, description: "Changed attributes. Use credential_source_id instead of raw secrets." },
+        },
+        required: ["resource", "id", "data"],
+      },
+    },
+    {
+      name: "tenant_resource_delete",
+      description: "Delete or revoke an allowlisted tenant resource. Requires tenant owner/admin API token.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          resource: { type: "string", enum: [...TENANT_RESOURCE_NAMES], description: "Tenant resource name" },
+          id: { type: "string", description: "Resource ID" },
+        },
+        required: ["resource", "id"],
+      },
+    },
+    {
+      name: "test_governance_policy",
+      description: "Dry-run an AGT YAML governance policy against a JSON context. Requires tenant owner/admin API token.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Governance policy ID" },
+          context: { type: "object", additionalProperties: true, description: "Policy evaluation context" },
+        },
+        required: ["id", "context"],
+      },
+    },
+    {
+      name: "tenant_team_list",
+      description: "List tenant members, pending invitations, and allowed email domains. Requires tenant owner/admin API token.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "tenant_team_invite",
+      description: "Invite a tenant member by email. Invitation token is emailed by the app and is never returned.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          email: { type: "string", description: "Invitee email" },
+          role: { type: "string", description: "admin, member, viewer, or numeric role" },
+        },
+        required: ["email"],
+      },
+    },
+    {
+      name: "tenant_team_set_inference_role",
+      description: "Assign or clear an inference role for a tenant member. Requires tenant owner/admin API token.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          member_id: { type: "string", description: "Member user ID" },
+          inference_role_id: { type: ["string", "null"], description: "Inference role ID, or null to clear" },
+        },
+        required: ["member_id"],
+      },
+    },
+    {
+      name: "tenant_team_disable",
+      description: "Disable a tenant member and block API access. Requires tenant owner/admin API token.",
+      inputSchema: {
+        type: "object",
+        properties: { member_id: { type: "string", description: "Member user ID" } },
+        required: ["member_id"],
+      },
+    },
+    {
+      name: "tenant_team_enable",
+      description: "Re-enable a disabled tenant member. Requires tenant owner/admin API token.",
+      inputSchema: {
+        type: "object",
+        properties: { member_id: { type: "string", description: "Member user ID" } },
+        required: ["member_id"],
+      },
+    },
+    {
+      name: "tenant_team_remove",
+      description: "Remove a tenant member. Requires tenant owner/admin API token.",
+      inputSchema: {
+        type: "object",
+        properties: { member_id: { type: "string", description: "Member user ID" } },
+        required: ["member_id"],
+      },
+    },
+    {
+      name: "tenant_invitation_cancel",
+      description: "Cancel a pending tenant invitation. Requires tenant owner/admin API token.",
+      inputSchema: {
+        type: "object",
+        properties: { invitation_id: { type: "string", description: "Invitation ID" } },
+        required: ["invitation_id"],
+      },
+    },
+    {
+      name: "tenant_domains_update",
+      description: "Replace the tenant's allowed email domains. Pass an empty array to allow any domain.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          domains: { type: "array", items: { type: "string" }, description: "Allowed email domains" },
+        },
+        required: ["domains"],
+      },
+    },
+    {
+      name: "inference_capture_show",
+      description: "Show request-capture settings for fine-tuning data capture. Secret values are not returned.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "inference_capture_update",
+      description: "Update request-capture settings. Use credential_source_id references; raw cloud secrets are refused by MCP.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          data: { type: "object", additionalProperties: true, description: "Capture settings" },
+        },
+        required: ["data"],
+      },
+    },
+  ];
+}
+
 export async function startMcpServer(): Promise<void> {
   // Lazy client initialization — deferred until a tool is called.
   // This allows the server to start and list tools without a valid API key,
@@ -23,7 +390,7 @@ export async function startMcpServer(): Promise<void> {
   };
 
   const server = new Server(
-    { name: "tuning-engines", version: "0.3.6" },
+    { name: "tuning-engines", version: "0.4.6" },
     {
       capabilities: { tools: {} },
       instructions:
@@ -664,6 +1031,17 @@ export async function startMcpServer(): Promise<void> {
           properties: {},
         },
       },
+      {
+        name: "get_inference_token",
+        description:
+          "Exchange an inference key (sk-te-...) for a short-lived inference JWT. " +
+          "This only works when this MCP server is configured with an inference key instead of a user API token.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {},
+        },
+      },
+      ...runtimeAndGovernanceTools(),
       // --- Agents ---
       {
         name: "list_agents",
@@ -967,6 +1345,168 @@ export async function startMcpServer(): Promise<void> {
         case "get_inference_jwt":
           result = await getClient().getInferenceJwt();
           break;
+
+        case "get_inference_token":
+          result = await getClient().getInferenceToken();
+          break;
+
+        case "list_traces":
+          result = await getClient().listTraces({
+            limit: args?.limit as number | undefined,
+            offset: args?.offset as number | undefined,
+          });
+          break;
+
+        case "show_trace":
+          result = await getClient().getTrace(args!.run_id as string);
+          break;
+
+        case "create_trace": {
+          const data = parseDataObject(args?.data);
+          if (hasBlockedSecretField(data)) {
+            throw new Error("Trace payload appears to contain raw secret fields. Remove secrets from metadata/events before ingesting.");
+          }
+          result = await getClient().createTrace(data);
+          break;
+        }
+
+        case "list_policy_decisions":
+          result = await getClient().listPolicyDecisions({
+            decision_action: args?.decision_action as string | undefined,
+            policy_action: args?.policy_action as string | undefined,
+            evaluation_mode: args?.evaluation_mode as string | undefined,
+            run_id: args?.run_id as string | undefined,
+            request_id: args?.request_id as string | undefined,
+            limit: args?.limit as number | undefined,
+            offset: args?.offset as number | undefined,
+          });
+          break;
+
+        case "show_policy_decision":
+          result = await getClient().getPolicyDecision(args!.id as string);
+          break;
+
+        case "list_approvals":
+          result = await getClient().listApprovals({
+            status: args?.status as string | undefined,
+            limit: args?.limit as number | undefined,
+            offset: args?.offset as number | undefined,
+          });
+          break;
+
+        case "show_approval":
+          result = await getClient().getApproval(args!.id as string);
+          break;
+
+        case "approve_approval":
+          result = await getClient().approveApproval(args!.id as string);
+          break;
+
+        case "deny_approval":
+          result = await getClient().denyApproval(args!.id as string);
+          break;
+
+        case "list_tenant_resources":
+          result = {
+            resources: TENANT_RESOURCE_NAMES,
+            notes: [
+              "Internal /internal/inference/* routes are intentionally not exposed.",
+              "MCP refuses inference-key creation and raw secret fields; use CLI/web UI for those workflows.",
+            ],
+          };
+          break;
+
+        case "tenant_resource_list": {
+          const resource = assertTenantResourceName(args?.resource);
+          result = await getClient().listTenantResource(resource, {
+            limit: args?.limit as number | undefined,
+            offset: args?.offset as number | undefined,
+          });
+          break;
+        }
+
+        case "tenant_resource_show": {
+          const resource = assertTenantResourceName(args?.resource);
+          result = await getClient().getTenantResource(resource, args!.id as string);
+          break;
+        }
+
+        case "tenant_resource_create": {
+          const resource = assertTenantResourceName(args?.resource);
+          const data = parseDataObject(args?.data);
+          assertSafeMcpMutation(resource, data);
+          result = await getClient().createTenantResource(resource, data);
+          break;
+        }
+
+        case "tenant_resource_update": {
+          const resource = assertTenantResourceName(args?.resource);
+          const data = parseDataObject(args?.data);
+          assertSafeMcpMutation(resource, data);
+          result = await getClient().updateTenantResource(resource, args!.id as string, data);
+          break;
+        }
+
+        case "tenant_resource_delete": {
+          const resource = assertTenantResourceName(args?.resource);
+          result = await getClient().deleteTenantResource(resource, args!.id as string);
+          break;
+        }
+
+        case "test_governance_policy":
+          result = await getClient().testGovernancePolicy(
+            args!.id as string,
+            parseDataObject(args?.context, "context"),
+          );
+          break;
+
+        case "tenant_team_list":
+          result = await getClient().getTenantTeam();
+          break;
+
+        case "tenant_team_invite":
+          result = await getClient().inviteTenantMember({
+            email: args!.email as string,
+            role: args?.role as string | number | undefined,
+          });
+          break;
+
+        case "tenant_team_set_inference_role":
+          result = await getClient().updateTenantMember(args!.member_id as string, {
+            inference_role_id: (args?.inference_role_id ?? null) as string | null,
+          });
+          break;
+
+        case "tenant_team_disable":
+          result = await getClient().setTenantMemberEnabled(args!.member_id as string, false);
+          break;
+
+        case "tenant_team_enable":
+          result = await getClient().setTenantMemberEnabled(args!.member_id as string, true);
+          break;
+
+        case "tenant_team_remove":
+          result = await getClient().deleteTenantMember(args!.member_id as string);
+          break;
+
+        case "tenant_invitation_cancel":
+          result = await getClient().cancelTenantInvitation(args!.invitation_id as string);
+          break;
+
+        case "tenant_domains_update":
+          result = await getClient().updateTenantDomains((args!.domains as string[]) || []);
+          break;
+
+        case "inference_capture_show":
+          result = await getClient().getInferenceCaptureConfig();
+          break;
+
+        case "inference_capture_update": {
+          const data = parseDataObject(args?.data);
+          assertSafeMcpMutation("inference_capture", data);
+          result = await getClient().updateInferenceCaptureConfig(data);
+          break;
+        }
 
         // --- Agents ---
         case "list_agents":
