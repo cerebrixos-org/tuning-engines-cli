@@ -24,6 +24,9 @@ import { registerOrchestrationCommands } from "./commands/orchestration";
 import { registerInterventionCommands } from "./commands/interventions";
 import { registerStateCommands } from "./commands/state";
 import { registerRegistryCommands } from "./commands/registry";
+import { registerBulkImportCommands } from "./commands/bulk-import";
+import { registerFileCommands } from "./commands/files";
+import { registerMcpToolCommands } from "./commands/mcp-tools";
 
 const program = new Command();
 
@@ -58,15 +61,21 @@ registerTraceCommands(program, getClient);
 registerInterventionCommands(program, getClient);
 registerStateCommands(program, getClient);
 registerRegistryCommands(program, getClient);
+registerBulkImportCommands(program, getClient);
+registerFileCommands(program, getClient);
 registerPolicyDecisionCommands(program, getClient);
 registerPolicyTemplateCommands(program, getClient);
 registerPolicyDraftCommands(program, getClient);
 registerOrchestrationCommands(program);
 
 // MCP server subcommand
-program
+const mcp = program
   .command("mcp")
-  .description("MCP server for AI assistant integration")
+  .description("MCP server for AI assistant integration and registry tool operations");
+
+registerMcpToolCommands(mcp, getClient);
+
+mcp
   .command("serve")
   .description("Start the MCP server (stdio transport)")
   .action(async () => {

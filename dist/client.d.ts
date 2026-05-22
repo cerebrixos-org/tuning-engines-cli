@@ -146,6 +146,19 @@ export declare class TuningEnginesClient {
         start_date?: string;
         end_date?: string;
         model?: string;
+        user_id?: string;
+        range?: string;
+        limit?: number;
+    }): Promise<any>;
+    getInferenceUsageAnalytics(options?: {
+        view?: string;
+        range?: string;
+        start_date?: string;
+        end_date?: string;
+        model?: string;
+        user_id?: string;
+        limit?: number;
+        page?: number;
     }): Promise<any>;
     getInferenceJwt(): Promise<any>;
     getInferenceToken(): Promise<any>;
@@ -187,6 +200,27 @@ export declare class TuningEnginesClient {
     dryRunRegistrySync(manifest: Record<string, any>): Promise<any>;
     applyRegistrySync(manifest: Record<string, any>): Promise<any>;
     getRegistrySync(id: string): Promise<any>;
+    listBulkImports(options?: {
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getBulkImport(id: string): Promise<any>;
+    createBulkImport(params: {
+        target_type: string;
+        rows: Record<string, any>[];
+        dry_run?: boolean;
+    }): Promise<any>;
+    listFiles(options?: {
+        purpose?: string;
+        limit?: number;
+    }): Promise<any>;
+    getFile(id: string): Promise<any>;
+    uploadFile(filePath: string, options?: {
+        purpose?: string;
+        contentType?: string;
+    }): Promise<any>;
+    downloadFileContent(id: string): Promise<Buffer>;
+    deleteFile(id: string): Promise<any>;
     listPolicyDecisions(options?: {
         decision_action?: string;
         policy_action?: string;
@@ -235,6 +269,15 @@ export declare class TuningEnginesClient {
     updateTenantDomains(domains: string[]): Promise<any>;
     getInferenceCaptureConfig(): Promise<any>;
     updateInferenceCaptureConfig(params: Record<string, any>): Promise<any>;
+    listMcpTools(serverId: string, options?: {
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    rediscoverMcpServer(serverId: string): Promise<any>;
+    updateMcpTool(serverId: string, toolId: string, params: {
+        enabled?: boolean;
+    }): Promise<any>;
+    toggleMcpTool(serverId: string, toolId: string): Promise<any>;
     static createDeviceSession(apiUrl: string): Promise<{
         device_code: string;
         verification_url: string;
@@ -248,6 +291,9 @@ export declare class TuningEnginesClient {
     private static requestNoAuth;
     private request;
     private getApiAccessToken;
+    private requestRaw;
+    private requestMultipart;
+    private escapeMultipart;
     private requestWithBearer;
 }
 //# sourceMappingURL=client.d.ts.map

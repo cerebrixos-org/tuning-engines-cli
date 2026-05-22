@@ -33,80 +33,84 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.registerInferenceCommands = registerInferenceCommands;
+exports.registerMcpToolCommands = registerMcpToolCommands;
 const output = __importStar(require("../output"));
-function printResult(result) {
+function printResult(result, asJson) {
+    if (asJson) {
+        output.json(result);
+        return;
+    }
     output.json(result);
 }
-function registerInferenceCommands(program, getClient) {
-    const inference = program
-        .command("inference")
-        .description("Inspect inference models, usage, and direct API access");
-    inference
-        .command("models")
-        .description("List available inference models")
+function registerMcpToolCommands(mcp, getClient) {
+    mcp
+        .command("rediscover <server-id>")
+        .description("Queue MCP tools/list discovery for a tenant-owned MCP server")
         .option("--json", "Output as JSON")
-        .action(async () => {
+        .action(async (serverId, opts) => {
         try {
-            printResult(await getClient().listInferenceModels());
+            printResult(await getClient().rediscoverMcpServer(serverId), opts.json);
         }
         catch (err) {
             console.error(err.message);
             process.exit(1);
         }
     });
-    inference
-        .command("usage")
-        .description("Show inference usage logs or analytics")
-        .option("--view <view>", "Analytics view: overview, models, users, errors, activity, or logs")
-        .option("--range <range>", "Usage range: 24h, 7d, 30d, or custom", "7d")
-        .option("--start-date <date>", "Start date")
-        .option("--end-date <date>", "End date")
-        .option("--model <model>", "Model filter")
-        .option("--user-id <id>", "User filter for tenant admins")
-        .option("-l, --limit <n>", "Max rows/items", "50")
-        .option("--page <n>", "Page for logs view", "1")
+    const tools = mcp
+        .command("tools")
+        .description("List and enable/disable discovered MCP tools");
+    tools
+        .command("list <server-id>")
+        .description("List discovered tools for an MCP server")
+        .option("-l, --limit <n>", "Max results", "100")
+        .option("--offset <n>", "Offset", "0")
         .option("--json", "Output as JSON")
-        .action(async (opts) => {
+        .action(async (serverId, opts) => {
         try {
-            const params = {
-                range: opts.range,
-                start_date: opts.startDate,
-                end_date: opts.endDate,
-                model: opts.model,
-                user_id: opts.userId,
+            const result = await getClient().listMcpTools(serverId, {
                 limit: Number(opts.limit),
-                page: Number(opts.page),
-            };
-            printResult(opts.view
-                ? await getClient().getInferenceUsageAnalytics({ ...params, view: opts.view })
-                : await getClient().getInferenceUsage(params));
+                offset: Number(opts.offset),
+            });
+            printResult(result, opts.json);
         }
         catch (err) {
             console.error(err.message);
             process.exit(1);
         }
     });
-    inference
-        .command("jwt")
-        .description("Get a JWT for direct inference API access")
+    tools
+        .command("enable <server-id> <tool-id>")
+        .description("Enable a discovered MCP tool")
         .option("--json", "Output as JSON")
-        .action(async () => {
+        .action(async (serverId, toolId, opts) => {
         try {
-            printResult(await getClient().getInferenceJwt());
+            printResult(await getClient().updateMcpTool(serverId, toolId, { enabled: true }), opts.json);
         }
         catch (err) {
             console.error(err.message);
             process.exit(1);
         }
     });
-    inference
-        .command("token")
-        .description("Exchange an inference key (sk-te-...) for a short-lived inference JWT")
+    tools
+        .command("disable <server-id> <tool-id>")
+        .description("Disable a discovered MCP tool")
         .option("--json", "Output as JSON")
-        .action(async () => {
+        .action(async (serverId, toolId, opts) => {
         try {
-            printResult(await getClient().getInferenceToken());
+            printResult(await getClient().updateMcpTool(serverId, toolId, { enabled: false }), opts.json);
+        }
+        catch (err) {
+            console.error(err.message);
+            process.exit(1);
+        }
+    });
+    tools
+        .command("toggle <server-id> <tool-id>")
+        .description("Toggle a discovered MCP tool")
+        .option("--json", "Output as JSON")
+        .action(async (serverId, toolId, opts) => {
+        try {
+            printResult(await getClient().toggleMcpTool(serverId, toolId), opts.json);
         }
         catch (err) {
             console.error(err.message);
@@ -114,4 +118,4 @@ function registerInferenceCommands(program, getClient) {
         }
     });
 }
-//# sourceMappingURL=inference.js.map
+//# sourceMappingURL=mcp-tools.js.map

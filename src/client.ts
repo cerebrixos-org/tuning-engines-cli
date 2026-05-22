@@ -1,5 +1,7 @@
 import * as https from "https";
 import * as http from "http";
+import * as fs from "fs";
+import * as path from "path";
 import { URL } from "url";
 import { USER_AGENT } from "./version";
 
@@ -327,13 +329,42 @@ export class TuningEnginesClient {
     start_date?: string;
     end_date?: string;
     model?: string;
+    user_id?: string;
+    range?: string;
+    limit?: number;
   }): Promise<any> {
     const params = new URLSearchParams();
     if (options?.start_date) params.set("start_date", options.start_date);
     if (options?.end_date) params.set("end_date", options.end_date);
     if (options?.model) params.set("model", options.model);
+    if (options?.user_id) params.set("user_id", options.user_id);
+    if (options?.range) params.set("range", options.range);
+    if (options?.limit) params.set("limit", String(options.limit));
     const qs = params.toString();
     return this.request("GET", `/api/v1/inference/usage${qs ? `?${qs}` : ""}`);
+  }
+
+  async getInferenceUsageAnalytics(options?: {
+    view?: string;
+    range?: string;
+    start_date?: string;
+    end_date?: string;
+    model?: string;
+    user_id?: string;
+    limit?: number;
+    page?: number;
+  }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.view) params.set("view", options.view);
+    if (options?.range) params.set("range", options.range);
+    if (options?.start_date) params.set("start_date", options.start_date);
+    if (options?.end_date) params.set("end_date", options.end_date);
+    if (options?.model) params.set("model", options.model);
+    if (options?.user_id) params.set("user_id", options.user_id);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.page) params.set("page", String(options.page));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/inference/usage/analytics${qs ? `?${qs}` : ""}`);
   }
 
   async getInferenceJwt(): Promise<any> {
@@ -454,6 +485,64 @@ export class TuningEnginesClient {
 
   async getRegistrySync(id: string): Promise<any> {
     return this.request("GET", `/api/v1/registry_syncs/${encodeURIComponent(id)}`);
+  }
+
+  // --- Bulk imports ---
+
+  async listBulkImports(options?: { limit?: number; offset?: number }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/bulk_imports${qs ? `?${qs}` : ""}`);
+  }
+
+  async getBulkImport(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/bulk_imports/${encodeURIComponent(id)}`);
+  }
+
+  async createBulkImport(params: {
+    target_type: string;
+    rows: Record<string, any>[];
+    dry_run?: boolean;
+  }): Promise<any> {
+    return this.request("POST", "/api/v1/bulk_imports", params);
+  }
+
+  // --- Files ---
+
+  async listFiles(options?: { purpose?: string; limit?: number }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.purpose) params.set("purpose", options.purpose);
+    if (options?.limit) params.set("limit", String(options.limit));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/files${qs ? `?${qs}` : ""}`);
+  }
+
+  async getFile(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/files/${encodeURIComponent(id)}`);
+  }
+
+  async uploadFile(filePath: string, options?: { purpose?: string; contentType?: string }): Promise<any> {
+    const resolved = path.resolve(filePath);
+    const fileBuffer = fs.readFileSync(resolved);
+    return this.requestMultipart("/api/v1/files", {
+      purpose: options?.purpose || "assistants",
+      content_type: options?.contentType || "application/octet-stream",
+    }, {
+      fieldName: "file",
+      filename: path.basename(resolved),
+      contentType: options?.contentType || "application/octet-stream",
+      content: fileBuffer,
+    });
+  }
+
+  async downloadFileContent(id: string): Promise<Buffer> {
+    return this.requestRaw("GET", `/api/v1/files/${encodeURIComponent(id)}/content`);
+  }
+
+  async deleteFile(id: string): Promise<any> {
+    return this.request("DELETE", `/api/v1/files/${encodeURIComponent(id)}`);
   }
 
   // --- Policy decisions ---
@@ -592,6 +681,26 @@ export class TuningEnginesClient {
     return this.request("PATCH", "/api/v1/tenant/inference_capture", params);
   }
 
+  async listMcpTools(serverId: string, options?: { limit?: number; offset?: number }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/tenant/mcp_servers/${encodeURIComponent(serverId)}/tools${qs ? `?${qs}` : ""}`);
+  }
+
+  async rediscoverMcpServer(serverId: string): Promise<any> {
+    return this.request("POST", `/api/v1/tenant/mcp_servers/${encodeURIComponent(serverId)}/rediscover`);
+  }
+
+  async updateMcpTool(serverId: string, toolId: string, params: { enabled?: boolean }): Promise<any> {
+    return this.request("PATCH", `/api/v1/tenant/mcp_servers/${encodeURIComponent(serverId)}/tools/${encodeURIComponent(toolId)}`, params);
+  }
+
+  async toggleMcpTool(serverId: string, toolId: string): Promise<any> {
+    return this.request("POST", `/api/v1/tenant/mcp_servers/${encodeURIComponent(serverId)}/tools/${encodeURIComponent(toolId)}/toggle`);
+  }
+
   // --- Device Auth (unauthenticated) ---
 
   static async createDeviceSession(
@@ -706,6 +815,120 @@ export class TuningEnginesClient {
     this.apiAccessToken = token;
     this.apiAccessTokenExpiresAt = now + expiresIn;
     return token;
+  }
+
+  private async requestRaw(method: string, path: string): Promise<Buffer> {
+    const token = await this.getApiAccessToken();
+    return new Promise((resolve, reject) => {
+      const url = new URL(path, this.apiUrl);
+      const isHttps = url.protocol === "https:";
+      const transport = isHttps ? https : http;
+
+      const options: https.RequestOptions = {
+        hostname: url.hostname,
+        port: url.port || (isHttps ? 443 : 80),
+        path: url.pathname + url.search,
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/octet-stream",
+          "User-Agent": USER_AGENT,
+        },
+      };
+
+      const req = transport.request(options, (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () => {
+          const body = Buffer.concat(chunks);
+          if (res.statusCode && res.statusCode >= 400) {
+            reject(new Error(`API Error (${res.statusCode}): ${body.toString("utf8")}`));
+            return;
+          }
+          resolve(body);
+        });
+      });
+
+      req.on("error", reject);
+      req.end();
+    });
+  }
+
+  private async requestMultipart(
+    pathName: string,
+    fields: Record<string, string>,
+    file: { fieldName: string; filename: string; contentType: string; content: Buffer }
+  ): Promise<any> {
+    const token = await this.getApiAccessToken();
+    const boundary = `----te-cli-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+    const parts: Buffer[] = [];
+
+    for (const [name, value] of Object.entries(fields)) {
+      parts.push(Buffer.from(`--${boundary}\r\n`));
+      parts.push(Buffer.from(`Content-Disposition: form-data; name="${this.escapeMultipart(name)}"\r\n\r\n`));
+      parts.push(Buffer.from(`${value}\r\n`));
+    }
+
+    parts.push(Buffer.from(`--${boundary}\r\n`));
+    parts.push(Buffer.from(
+      `Content-Disposition: form-data; name="${this.escapeMultipart(file.fieldName)}"; filename="${this.escapeMultipart(file.filename)}"\r\n`
+    ));
+    parts.push(Buffer.from(`Content-Type: ${file.contentType}\r\n\r\n`));
+    parts.push(file.content);
+    parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+    const body = Buffer.concat(parts);
+
+    return new Promise((resolve, reject) => {
+      const url = new URL(pathName, this.apiUrl);
+      const isHttps = url.protocol === "https:";
+      const transport = isHttps ? https : http;
+
+      const options: https.RequestOptions = {
+        hostname: url.hostname,
+        port: url.port || (isHttps ? 443 : 80),
+        path: url.pathname + url.search,
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+          "Content-Length": body.length,
+          Accept: "application/json",
+          "User-Agent": USER_AGENT,
+        },
+      };
+
+      const req = transport.request(options, (res) => {
+        let data = "";
+        res.on("data", (chunk: Buffer) => {
+          data += chunk.toString();
+        });
+        res.on("end", () => {
+          try {
+            const parsed = JSON.parse(data);
+            if (res.statusCode && res.statusCode >= 400) {
+              const error = parsed.error || { code: "unknown", message: data };
+              reject(new Error(`API Error (${res.statusCode}): ${error.message || JSON.stringify(error)}`));
+            } else {
+              resolve(parsed);
+            }
+          } catch {
+            if (res.statusCode && res.statusCode >= 400) {
+              reject(new Error(`API Error (${res.statusCode}): ${data}`));
+            } else {
+              resolve(data);
+            }
+          }
+        });
+      });
+
+      req.on("error", reject);
+      req.write(body);
+      req.end();
+    });
+  }
+
+  private escapeMultipart(value: string): string {
+    return value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
   }
 
   private requestWithBearer(

@@ -58,6 +58,9 @@ const orchestration_1 = require("./commands/orchestration");
 const interventions_1 = require("./commands/interventions");
 const state_1 = require("./commands/state");
 const registry_1 = require("./commands/registry");
+const bulk_import_1 = require("./commands/bulk-import");
+const files_1 = require("./commands/files");
+const mcp_tools_1 = require("./commands/mcp-tools");
 const program = new commander_1.Command();
 program
     .name("te")
@@ -88,14 +91,18 @@ const getClient = () => {
 (0, interventions_1.registerInterventionCommands)(program, getClient);
 (0, state_1.registerStateCommands)(program, getClient);
 (0, registry_1.registerRegistryCommands)(program, getClient);
+(0, bulk_import_1.registerBulkImportCommands)(program, getClient);
+(0, files_1.registerFileCommands)(program, getClient);
 (0, policy_decisions_1.registerPolicyDecisionCommands)(program, getClient);
 (0, policy_templates_1.registerPolicyTemplateCommands)(program, getClient);
 (0, policy_templates_1.registerPolicyDraftCommands)(program, getClient);
 (0, orchestration_1.registerOrchestrationCommands)(program);
 // MCP server subcommand
-program
+const mcp = program
     .command("mcp")
-    .description("MCP server for AI assistant integration")
+    .description("MCP server for AI assistant integration and registry tool operations");
+(0, mcp_tools_1.registerMcpToolCommands)(mcp, getClient);
+mcp
     .command("serve")
     .description("Start the MCP server (stdio transport)")
     .action(async () => {

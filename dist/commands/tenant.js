@@ -47,6 +47,18 @@ const RESOURCE_NAMES = [
     "tenant_skills",
     "credential_sources",
 ];
+const TYPED_RESOURCES = [
+    { command: "keys", resource: "inference_keys", label: "inference keys", validates: false },
+    { command: "roles", resource: "inference_roles", label: "inference roles", validates: false },
+    { command: "models", resource: "model_deployments", label: "model deployments", validates: false },
+    { command: "routing-profiles", resource: "routing_profiles", label: "routing profiles", validates: false },
+    { command: "guardrails", resource: "guardrail_policies", label: "guardrail policies", validates: true },
+    { command: "governance-policies", resource: "governance_policies", label: "AGT governance policies", validates: true },
+    { command: "mcp-servers", resource: "mcp_servers", label: "MCP servers", validates: true },
+    { command: "agents", resource: "tenant_agents", label: "tenant agents", validates: true },
+    { command: "skills", resource: "tenant_skills", label: "tenant skills", validates: true },
+    { command: "credential-sources", resource: "credential_sources", label: "credential sources", validates: false },
+];
 function parseJsonObject(raw) {
     if (!raw)
         return {};
@@ -65,6 +77,109 @@ function printResult(result, asJson) {
 }
 function resourceHelp() {
     return `Allowed resources: ${RESOURCE_NAMES.join(", ")}`;
+}
+function registerTypedResourceCommands(tenant, getClient) {
+    for (const config of TYPED_RESOURCES) {
+        const group = tenant
+            .command(config.command)
+            .description(`Manage ${config.label}`);
+        group
+            .command("list")
+            .description(`List ${config.label}`)
+            .option("-l, --limit <n>", "Max results", "50")
+            .option("--offset <n>", "Offset", "0")
+            .option("--json", "Output as JSON")
+            .action(async (opts) => {
+            try {
+                const result = await getClient().listTenantResource(config.resource, {
+                    limit: Number(opts.limit),
+                    offset: Number(opts.offset),
+                });
+                printResult(result, opts.json);
+            }
+            catch (err) {
+                console.error(err.message);
+                process.exit(1);
+            }
+        });
+        group
+            .command("show <id>")
+            .description(`Show one ${config.label} record`)
+            .option("--json", "Output as JSON")
+            .action(async (id, opts) => {
+            try {
+                printResult(await getClient().getTenantResource(config.resource, id), opts.json);
+            }
+            catch (err) {
+                console.error(err.message);
+                process.exit(1);
+            }
+        });
+        group
+            .command("create")
+            .description(`Create ${config.label} from JSON`)
+            .requiredOption("--data <json>", "JSON object with resource attributes")
+            .option("--json", "Output as JSON")
+            .action(async (opts) => {
+            try {
+                printResult(await getClient().createTenantResource(config.resource, parseJsonObject(opts.data)), opts.json);
+            }
+            catch (err) {
+                console.error(err.message);
+                process.exit(1);
+            }
+        });
+        group
+            .command("update <id>")
+            .description(`Update ${config.label} from JSON`)
+            .requiredOption("--data <json>", "JSON object with changed attributes")
+            .option("--json", "Output as JSON")
+            .action(async (id, opts) => {
+            try {
+                printResult(await getClient().updateTenantResource(config.resource, id, parseJsonObject(opts.data)), opts.json);
+            }
+            catch (err) {
+                console.error(err.message);
+                process.exit(1);
+            }
+        });
+        group
+            .command("delete <id>")
+            .description(`Delete or revoke ${config.label}`)
+            .option("--json", "Output as JSON")
+            .action(async (id, opts) => {
+            try {
+                printResult(await getClient().deleteTenantResource(config.resource, id), opts.json);
+            }
+            catch (err) {
+                console.error(err.message);
+                process.exit(1);
+            }
+        });
+        if (config.validates) {
+            group
+                .command("validate")
+                .description(`Validate unsaved ${config.label} JSON`)
+                .requiredOption("--data <json>", "JSON object with resource attributes")
+                .option("--sample-text <text>", "Sample text for guardrail policy validation")
+                .option("--context <json>", "Policy context JSON for AGT governance policy validation")
+                .option("--json", "Output as JSON")
+                .action(async (opts) => {
+                try {
+                    const data = parseJsonObject(opts.data);
+                    if (opts.sampleText)
+                        data.sample_text = opts.sampleText;
+                    if (opts.context)
+                        data.context = parseJsonObject(opts.context);
+                    printResult(await getClient().validateTenantResource(config.resource, data), opts.json);
+                }
+                catch (err) {
+                    console.error(err.message);
+                    process.exit(1);
+                }
+            });
+        }
+    }
 }
 function registerTenantCommands(program, getClient) {
     const tenant = program
@@ -192,6 +307,7 @@ function registerTenantCommands(program, getClient) {
             process.exit(1);
         }
     });
+    registerTypedResourceCommands(tenant, getClient);
     const team = tenant.command("team").description("Manage tenant members and invitations");
     team
         .command("list")
