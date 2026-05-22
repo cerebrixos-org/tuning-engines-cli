@@ -3,6 +3,7 @@
 import { Command } from "commander";
 import { TuningEnginesClient } from "./client";
 import { getApiKey, getApiUrl } from "./config";
+import { CLI_VERSION } from "./version";
 import { registerConfigCommands } from "./commands/config";
 import { registerJobCommands } from "./commands/jobs";
 import { registerModelCommands } from "./commands/models";
@@ -26,7 +27,7 @@ const program = new Command();
 program
   .name("te")
   .description("Tuning Engines CLI — fine-tune LLMs and browse the Marketplace from your terminal")
-  .version("0.4.7");
+  .version(CLI_VERSION);
 
 // Lazy client initialization (only when a command actually needs it)
 const getClient = (): TuningEnginesClient => {

@@ -1,6 +1,6 @@
 {
   "name": "tuningengines-cli",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "description": "Tuning Engines CLI, MCP server, and Python agent runtime adapters for governed model, agent, skill, and MCP workflows. Fine-tune open-source LLMs, run inference, manage datasets/evaluations, and connect LangGraph or Temporal while Tuning Engines handles policy, audit, usage, and token economics.",
   "main": "dist/cli.js",
   "bin": {

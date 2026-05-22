@@ -6,6 +6,7 @@ const stdio_js_1 = require("@modelcontextprotocol/sdk/server/stdio.js");
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const client_1 = require("./client");
 const config_1 = require("./config");
+const version_1 = require("./version");
 const TENANT_RESOURCE_NAMES = [
     "inference_keys",
     "inference_roles",
@@ -419,7 +420,7 @@ async function startMcpServer() {
         }
         return _client;
     };
-    const server = new index_js_1.Server({ name: "tuning-engines", version: "0.4.6" }, {
+    const server = new index_js_1.Server({ name: "tuning-engines", version: version_1.CLI_VERSION }, {
         capabilities: { tools: {} },
         instructions: "Tuning Engines — Domain-specific fine-tuning of open-source LLMs and SLMs, plus a Marketplace of pre-built models and datasets. Own your sovereign model with zero infrastructure.\n\n" +
             "USE THIS SERVER WHEN the user wants to:\n" +

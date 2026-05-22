@@ -1,6 +1,7 @@
 import * as https from "https";
 import * as http from "http";
 import { URL } from "url";
+import { USER_AGENT } from "./version";
 
 export interface ClientOptions {
   apiKey: string;
@@ -15,6 +16,8 @@ export interface ApiError {
 export class TuningEnginesClient {
   private apiKey: string;
   private apiUrl: string;
+  private apiAccessToken?: string;
+  private apiAccessTokenExpiresAt = 0;
 
   constructor(options: ClientOptions) {
     this.apiKey = options.apiKey;
@@ -338,7 +341,7 @@ export class TuningEnginesClient {
   }
 
   async getInferenceToken(): Promise<any> {
-    return this.request("POST", "/api/v1/inference/token");
+    return this.requestWithBearer("POST", "/api/v1/inference/token", this.apiKey);
   }
 
   // --- Agents ---
@@ -549,7 +552,7 @@ export class TuningEnginesClient {
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
-          "User-Agent": "tuning-engines-cli/0.4.6",
+          "User-Agent": USER_AGENT,
         },
       };
 
@@ -598,6 +601,35 @@ export class TuningEnginesClient {
     path: string,
     body?: Record<string, any>
   ): Promise<any> {
+    return this.getApiAccessToken().then((token) =>
+      this.requestWithBearer(method, path, token, body)
+    );
+  }
+
+  private async getApiAccessToken(): Promise<string> {
+    const now = Math.floor(Date.now() / 1000);
+    if (this.apiAccessToken && this.apiAccessTokenExpiresAt - now > 60) {
+      return this.apiAccessToken;
+    }
+
+    const response = await this.requestWithBearer("POST", "/api/v1/auth/token", this.apiKey);
+    const token = response.access_token as string | undefined;
+    if (!token) {
+      throw new Error("API Error: authentication token exchange did not return an access token");
+    }
+
+    const expiresIn = Number(response.expires_in || 900);
+    this.apiAccessToken = token;
+    this.apiAccessTokenExpiresAt = now + expiresIn;
+    return token;
+  }
+
+  private requestWithBearer(
+    method: string,
+    path: string,
+    bearerToken: string,
+    body?: Record<string, any>
+  ): Promise<any> {
     return new Promise((resolve, reject) => {
       const url = new URL(path, this.apiUrl);
       const isHttps = url.protocol === "https:";
@@ -609,10 +641,10 @@ export class TuningEnginesClient {
         path: url.pathname + url.search,
         method,
         headers: {
-          Authorization: `Bearer ${this.apiKey}`,
+          Authorization: `Bearer ${bearerToken}`,
           "Content-Type": "application/json",
           Accept: "application/json",
-          "User-Agent": "tuning-engines-cli/0.4.7",
+          "User-Agent": USER_AGENT,
         },
       };
 

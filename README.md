@@ -513,6 +513,11 @@ proxy routes, inference-key creation, and raw secret-bearing mutation fields.
 | `TE_API_KEY` | API key (overrides config file) |
 | `TE_API_URL` | API URL (default: `https://app.tuningengines.com`) |
 
+Tenant management commands keep the configured `te_*` API token local and
+exchange it for a short-lived management JWT before calling the API. Inference
+keys (`sk-te-*`) are for inference-only flows such as `te inference token` and
+proxy calls; they are not accepted for tenant registry management commands.
+
 ## Inference Smoke Testing
 
 Use `te-inference-smoke` to exercise inference behavior as a tenant admin and, optionally, real tenant users. The default run is read-only. Set `TE_SMOKE_MUTATE=1` to create temporary inference roles, keys, policies, guardrails, MCP servers, agents, and skills, then test permission permutations and clean them up.

@@ -6,6 +6,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { TuningEnginesClient } from "./client";
 import { getApiKey, getApiUrl } from "./config";
+import { CLI_VERSION } from "./version";
 
 type ToolDefinition = {
   name: string;
@@ -437,7 +438,7 @@ export async function startMcpServer(): Promise<void> {
   };
 
   const server = new Server(
-    { name: "tuning-engines", version: "0.4.6" },
+    { name: "tuning-engines", version: CLI_VERSION },
     {
       capabilities: { tools: {} },
       instructions:

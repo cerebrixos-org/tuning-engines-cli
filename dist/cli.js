@@ -37,6 +37,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const commander_1 = require("commander");
 const client_1 = require("./client");
 const config_1 = require("./config");
+const version_1 = require("./version");
 const config_2 = require("./commands/config");
 const jobs_1 = require("./commands/jobs");
 const models_1 = require("./commands/models");
@@ -58,7 +59,7 @@ const program = new commander_1.Command();
 program
     .name("te")
     .description("Tuning Engines CLI — fine-tune LLMs and browse the Marketplace from your terminal")
-    .version("0.4.7");
+    .version(version_1.CLI_VERSION);
 // Lazy client initialization (only when a command actually needs it)
 const getClient = () => {
     return new client_1.TuningEnginesClient({

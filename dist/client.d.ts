@@ -9,6 +9,8 @@ export interface ApiError {
 export declare class TuningEnginesClient {
     private apiKey;
     private apiUrl;
+    private apiAccessToken?;
+    private apiAccessTokenExpiresAt;
     constructor(options: ClientOptions);
     listJobs(options?: {
         status?: string;
@@ -215,5 +217,7 @@ export declare class TuningEnginesClient {
     }>;
     private static requestNoAuth;
     private request;
+    private getApiAccessToken;
+    private requestWithBearer;
 }
 //# sourceMappingURL=client.d.ts.map

@@ -37,9 +37,12 @@ exports.TuningEnginesClient = void 0;
 const https = __importStar(require("https"));
 const http = __importStar(require("http"));
 const url_1 = require("url");
+const version_1 = require("./version");
 class TuningEnginesClient {
     apiKey;
     apiUrl;
+    apiAccessToken;
+    apiAccessTokenExpiresAt = 0;
     constructor(options) {
         this.apiKey = options.apiKey;
         this.apiUrl = options.apiUrl.replace(/\/$/, "");
@@ -215,7 +218,7 @@ class TuningEnginesClient {
         return this.request("POST", "/api/v1/inference/jwt");
     }
     async getInferenceToken() {
-        return this.request("POST", "/api/v1/inference/token");
+        return this.requestWithBearer("POST", "/api/v1/inference/token", this.apiKey);
     }
     // --- Agents ---
     async listAgents() {
@@ -372,7 +375,7 @@ class TuningEnginesClient {
                 headers: {
                     "Content-Type": "application/json",
                     Accept: "application/json",
-                    "User-Agent": "tuning-engines-cli/0.4.6",
+                    "User-Agent": version_1.USER_AGENT,
                 },
             };
             const req = transport.request(options, (res) => {
@@ -410,6 +413,24 @@ class TuningEnginesClient {
     }
     // --- HTTP ---
     request(method, path, body) {
+        return this.getApiAccessToken().then((token) => this.requestWithBearer(method, path, token, body));
+    }
+    async getApiAccessToken() {
+        const now = Math.floor(Date.now() / 1000);
+        if (this.apiAccessToken && this.apiAccessTokenExpiresAt - now > 60) {
+            return this.apiAccessToken;
+        }
+        const response = await this.requestWithBearer("POST", "/api/v1/auth/token", this.apiKey);
+        const token = response.access_token;
+        if (!token) {
+            throw new Error("API Error: authentication token exchange did not return an access token");
+        }
+        const expiresIn = Number(response.expires_in || 900);
+        this.apiAccessToken = token;
+        this.apiAccessTokenExpiresAt = now + expiresIn;
+        return token;
+    }
+    requestWithBearer(method, path, bearerToken, body) {
         return new Promise((resolve, reject) => {
             const url = new url_1.URL(path, this.apiUrl);
             const isHttps = url.protocol === "https:";
@@ -420,10 +441,10 @@ class TuningEnginesClient {
                 path: url.pathname + url.search,
                 method,
                 headers: {
-                    Authorization: `Bearer ${this.apiKey}`,
+                    Authorization: `Bearer ${bearerToken}`,
                     "Content-Type": "application/json",
                     Accept: "application/json",
-                    "User-Agent": "tuning-engines-cli/0.4.7",
+                    "User-Agent": version_1.USER_AGENT,
                 },
             };
             const req = transport.request(options, (res) => {
