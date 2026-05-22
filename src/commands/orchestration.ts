@@ -2,35 +2,45 @@ import { Command } from "commander";
 import * as fs from "fs";
 import * as path from "path";
 
-type Framework = "langgraph" | "temporal";
+type Framework = "langgraph" | "temporal" | "inngest" | "triggerdev" | "hatchet";
+
+const FRAMEWORKS: Framework[] = ["langgraph", "temporal", "inngest", "triggerdev", "hatchet"];
+
+const FRAMEWORK_LABELS: Record<Framework, string> = {
+  langgraph: "LangGraph",
+  temporal: "Temporal",
+  inngest: "Inngest",
+  triggerdev: "Trigger.dev",
+  hatchet: "Hatchet",
+};
 
 export function registerOrchestrationCommands(program: Command): void {
   const orchestration = program
     .command("orchestration")
-    .description("Create LangGraph or Temporal starter kits wired to Tuning Engines");
+    .description("Create orchestration starter kits wired to Tuning Engines");
 
   orchestration
     .command("init <framework>")
-    .description("Create a governed orchestration starter kit: langgraph or temporal")
+    .description(`Create a governed orchestration starter kit: ${FRAMEWORKS.join(", ")}`)
     .option("--dir <path>", "Output directory")
     .option("--force", "Overwrite existing files")
     .action((framework: string, opts) => {
       const normalized = framework.toLowerCase() as Framework;
-      if (normalized !== "langgraph" && normalized !== "temporal") {
-        console.error("framework must be one of: langgraph, temporal");
+      if (!FRAMEWORKS.includes(normalized)) {
+        console.error(`framework must be one of: ${FRAMEWORKS.join(", ")}`);
         process.exit(1);
       }
 
       const targetDir = path.resolve(opts.dir || `tuning-engines-${normalized}`);
       writeTemplate(targetDir, normalized, Boolean(opts.force));
       console.log(`Created ${normalized} starter kit at ${targetDir}`);
-      console.log("Set TE_API_KEY, then follow the README in that directory.");
+      console.log("Set TE_INFERENCE_KEY, then follow the README in that directory.");
     });
 }
 
 function writeTemplate(targetDir: string, framework: Framework, force: boolean): void {
   fs.mkdirSync(targetDir, { recursive: true });
-  const files = framework === "langgraph" ? langgraphFiles() : temporalFiles();
+  const files = filesFor(framework);
   for (const [name, content] of Object.entries(files)) {
     const filePath = path.join(targetDir, name);
     if (fs.existsSync(filePath) && !force) {
@@ -41,21 +51,37 @@ function writeTemplate(targetDir: string, framework: Framework, force: boolean):
   }
 }
 
-function sharedReadme(framework: Framework): string {
-  return `# Tuning Engines ${framework} starter
+function filesFor(framework: Framework): Record<string, string> {
+  switch (framework) {
+    case "langgraph":
+      return langgraphFiles();
+    case "temporal":
+      return temporalFiles();
+    case "inngest":
+      return nodeStarterFiles(framework, inngestSource());
+    case "triggerdev":
+      return nodeStarterFiles(framework, triggerdevSource(), "trigger/governed-ai.ts");
+    case "hatchet":
+      return nodeStarterFilesWithHatchet(framework, hatchetSource(), "src/workflows/tuning-engines-workflow.ts");
+  }
+}
 
-This starter keeps ${framework} in charge of orchestration state while Tuning Engines governs model, MCP, agent, and skill access.
+function sharedReadme(framework: Framework): string {
+  const label = FRAMEWORK_LABELS[framework];
+  return `# Tuning Engines ${label} starter
+
+This starter keeps ${label} in charge of orchestration state while Tuning Engines governs model, MCP, agent, and skill access.
 
 ## Configure
 
 \`\`\`bash
 cp .env.example .env
-export TE_API_KEY=sk-te-your-inference-key
+export TE_INFERENCE_KEY=sk-te-your-inference-key
 export TE_MODEL=auto
 \`\`\`
 
 Use a user API token \`te_...\` for CLI/admin actions such as \`te approvals list\` and \`te traces show\`.
-Use an inference key \`sk-te-...\` for model, MCP, agent, skill, and trace-ingest calls.
+Use an inference key \`sk-te-...\` for model, MCP, agent, skill, trace-ingest, and state-reference calls.
 
 ## Approval flow
 
@@ -75,7 +101,7 @@ Every model, MCP, agent, skill, approval, and runtime event should carry:
 
 - \`run_id\`: one durable workflow/graph/run id.
 - \`request_id\`: one request/span id, generated as \`req_...\`.
-- normalized event \`type\`: for example \`model.call\`, \`mcp.tool_call\`, \`agent.message\`, \`workflow.step\`, \`human.edit\`, \`action.finalized\`, or \`outcome.recorded\`.
+- normalized event \`type\`: for example \`model.call\`, \`mcp.tool_call\`, \`agent.message\`, \`workflow.step\`, \`human.edit\`, \`action.finalized\`, \`outcome.recorded\`, or \`state.reference\`.
 
 For the compounding-loop signal, record redacted decision metadata only:
 \`proposal_summary\`, \`changed_fields\`, \`change_summary\`, \`final_action\`,
@@ -94,7 +120,8 @@ pip install "tuning-agents[langgraph] @ git+https://github.com/cerebrixos-org/tu
 python app.py
 \`\`\`
 `,
-    ".env.example": envExample(),
+    ".env.example": envExample("langgraph"),
+    "tuning-registry.yml": registryManifest("langgraph"),
     "app.py": `import os
 import uuid
 
@@ -117,13 +144,9 @@ def policy_context(resource_name: str) -> dict:
     }
 
 
-def retry_after_approval(callable_, approval_id: str):
-    return callable_(approval_id=approval_id)
-
-
 def main() -> None:
     client = TuningClient(
-        api_key=os.environ["TE_API_KEY"],
+        api_key=os.environ["TE_INFERENCE_KEY"],
         api_url=os.getenv("TE_API_URL", "https://app.tuningengines.com"),
         inference_url=os.getenv("TE_INFERENCE_URL", "https://api.tuningengines.com/v1"),
     )
@@ -162,6 +185,15 @@ def main() -> None:
                 ),
             },
         )
+        client.upsert_state_reference({
+            "reference_type": "langgraph_checkpoint",
+            "runtime": "langgraph",
+            "provider": "langgraph",
+            "external_id": RUN_ID,
+            "run_id": RUN_ID,
+            "status": "active",
+            "metadata": {"checkpoint_store": "InMemorySaver"},
+        })
     except TuningError as exc:
         print("Model call needs attention:", exc)
 
@@ -206,7 +238,8 @@ pip install "tuning-agents[temporal] @ git+https://github.com/cerebrixos-org/tun
 python worker.py
 \`\`\`
 `,
-    ".env.example": envExample(),
+    ".env.example": envExample("temporal"),
+    "tuning-registry.yml": registryManifest("temporal"),
     "worker.py": `import asyncio
 import os
 import uuid
@@ -231,7 +264,7 @@ def policy_context(resource_name: str, run_id: str) -> dict:
 @activity.defn
 async def governed_model_activity(prompt: str, approval_id: str | None = None) -> dict:
     client = TuningClient(
-        api_key=os.environ["TE_API_KEY"],
+        api_key=os.environ["TE_INFERENCE_KEY"],
         api_url=os.getenv("TE_API_URL", "https://app.tuningengines.com"),
         inference_url=os.getenv("TE_INFERENCE_URL", "https://api.tuningengines.com/v1"),
     )
@@ -243,6 +276,36 @@ async def governed_model_activity(prompt: str, approval_id: str | None = None) -
             metadata=policy_context("temporal-model-call", run_id),
             approval_id=approval_id,
         )
+        client.trace.start(
+            "state.reference",
+            {
+                "request_id": f"req_{uuid.uuid4().hex}",
+                "state_reference": {
+                    "reference_type": "temporal_workflow",
+                    "runtime": "temporal",
+                    "provider": "temporal",
+                    "external_id": run_id,
+                    "run_id": run_id,
+                    "status": "active",
+                    "metadata": {
+                        "namespace": activity.info().workflow_namespace,
+                        "task_queue": activity.info().task_queue,
+                    },
+                },
+            },
+        )
+        client.upsert_state_reference({
+            "reference_type": "temporal_workflow",
+            "runtime": "temporal",
+            "provider": "temporal",
+            "external_id": run_id,
+            "run_id": run_id,
+            "status": "active",
+            "metadata": {
+                "namespace": activity.info().workflow_namespace,
+                "task_queue": activity.info().task_queue,
+            },
+        })
         client.trace.start(
             "outcome.recorded",
             {
@@ -256,20 +319,20 @@ async def governed_model_activity(prompt: str, approval_id: str | None = None) -
         )
         client.flush_trace(name="temporal-governed-demo", runtime="temporal", status="succeeded")
         return response.model_dump(mode="json") if hasattr(response, "model_dump") else response
-    except TuningError as exc:
+    except TuningError:
         client.flush_trace(name="temporal-governed-demo", runtime="temporal", status="failed")
         raise
 
 
 @activity.defn
 async def mcp_tool_activity(server_name: str, tool_name: str, arguments: dict) -> dict:
-    client = TuningClient(api_key=os.environ["TE_API_KEY"])
+    client = TuningClient(api_key=os.environ["TE_INFERENCE_KEY"])
     return await client.acall_mcp_tool(server_name=server_name, tool_name=tool_name, arguments=arguments)
 
 
 @activity.defn
 async def agent_activity(agent_name: str, message: str) -> dict:
-    client = TuningClient(api_key=os.environ["TE_API_KEY"])
+    client = TuningClient(api_key=os.environ["TE_INFERENCE_KEY"])
     return await client.acall_agent(agent_name=agent_name, message=message)
 
 
@@ -301,12 +364,691 @@ if __name__ == "__main__":
   };
 }
 
-function envExample(): string {
-  return `TE_API_KEY=sk-te-your-inference-key
+function nodeStarterFiles(
+  framework: Framework,
+  entrypoint: string,
+  entrypointPath = "src/workflow.ts",
+): Record<string, string> {
+  return {
+    "README.md": nodeReadme(framework, entrypointPath),
+    ".env.example": envExample(framework),
+    "package.json": nodePackageJson(framework),
+    "tsconfig.json": nodeTsconfig(),
+    "tuning-registry.yml": registryManifest(framework),
+    "src/tuning-engines.ts": tuningEnginesNodeHelper(),
+    [entrypointPath]: entrypoint,
+  };
+}
+
+function nodeReadme(framework: Framework, entrypointPath: string): string {
+  const label = FRAMEWORK_LABELS[framework];
+  return sharedReadme(framework) + `
+## Install
+
+\`\`\`bash
+npm install
+cp .env.example .env
+\`\`\`
+
+## Generated files
+
+- \`${entrypointPath}\`: ${label} workflow/task example.
+- \`src/tuning-engines.ts\`: small helper for governed model calls, trace ingest, approvals, MCP/agent/skill calls, and state references.
+- \`tuning-registry.yml\`: manifest skeleton for registry sync.
+
+## Run
+
+\`\`\`bash
+npm run typecheck
+\`\`\`
+
+Then run the ${label} worker/dev server using the normal ${label} workflow for your app.
+`;
+}
+
+function nodePackageJson(framework: Framework): string {
+  const deps: Record<string, string> = {};
+  if (framework === "inngest") deps.inngest = "^3.40.0";
+  if (framework === "triggerdev") deps["@trigger.dev/sdk"] = "^4.0.0";
+  if (framework === "hatchet") deps["@hatchet-dev/typescript-sdk"] = "^1.22.0";
+
+  return `${JSON.stringify(
+    {
+      name: `tuning-engines-${framework}-starter`,
+      private: true,
+      type: "module",
+      scripts: {
+        typecheck: "tsc --noEmit",
+      },
+      dependencies: deps,
+      devDependencies: {
+        "@types/node": "^20.0.0",
+        typescript: "^5.4.0",
+      },
+    },
+    null,
+    2,
+  )}
+`;
+}
+
+function nodeTsconfig(): string {
+  return `${JSON.stringify(
+    {
+      compilerOptions: {
+        target: "ES2022",
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+        strict: true,
+        esModuleInterop: true,
+        skipLibCheck: true,
+        forceConsistentCasingInFileNames: true,
+        outDir: "dist",
+      },
+      include: ["src/**/*.ts", "trigger/**/*.ts"],
+    },
+    null,
+    2,
+  )}
+`;
+}
+
+function envExample(framework: Framework): string {
+  const extra =
+    framework === "temporal"
+      ? `TEMPORAL_ADDRESS=localhost:7233
+TEMPORAL_TASK_QUEUE=tuning-engines-demo
+`
+      : framework === "hatchet"
+        ? `HATCHET_CLIENT_TOKEN=hatchet-token
+HATCHET_CLIENT_HOST_PORT=localhost:7077
+`
+        : framework === "triggerdev"
+          ? `TRIGGER_SECRET_KEY=tr_dev_your-trigger-secret
+`
+          : framework === "inngest"
+            ? `INNGEST_EVENT_KEY=local
+INNGEST_SIGNING_KEY=local
+`
+            : "";
+
+  return `TE_INFERENCE_KEY=sk-te-your-inference-key
 TE_API_URL=https://app.tuningengines.com
 TE_INFERENCE_URL=https://api.tuningengines.com/v1
 TE_MODEL=auto
-TEMPORAL_ADDRESS=localhost:7233
-TEMPORAL_TASK_QUEUE=tuning-engines-demo
+${extra}`;
+}
+
+function registryManifest(framework: Framework): string {
+  return `version: 1
+source: ${framework}
+resources:
+  mcp_servers:
+    - name: customer-memory
+      description: Customer-owned memory exposed through MCP resources/tools.
+      endpoint_url: https://example.com/mcp
+      auth_method: credential_source
+      credential_source_id: replace-with-credential-source-id
+      enabled: false
+      external_ref: ${framework}:customer-memory
+      metadata:
+        runtime: ${framework}
+        safe_to_sync: true
+  tenant_agents:
+    - name: support-agent
+      description: Existing agent endpoint invoked from ${FRAMEWORK_LABELS[framework]}.
+      endpoint_url: https://example.com/agents/support
+      auth_method: credential_source
+      credential_source_id: replace-with-credential-source-id
+      enabled: false
+      external_ref: ${framework}:support-agent
+      metadata:
+        runtime: ${framework}
+  tenant_skills:
+    - name: summarize-ticket
+      description: Skill package used by the governed workflow.
+      source_url: https://example.com/skills/summarize-ticket/SKILL.md
+      enabled: false
+      external_ref: ${framework}:summarize-ticket
+      metadata:
+        runtime: ${framework}
 `;
+}
+
+function tuningEnginesNodeHelper(): string {
+  return `import { randomUUID } from "node:crypto";
+
+export type TraceEvent = {
+  id: string;
+  type: string;
+  status?: string;
+  parent_id?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type StateReference = {
+  reference_type:
+    | "langgraph_checkpoint"
+    | "temporal_workflow"
+    | "vector_namespace"
+    | "memory_record"
+    | "mcp_resource"
+    | "external_context";
+  runtime: string;
+  provider?: string;
+  external_id?: string;
+  uri?: string;
+  key?: string;
+  run_id?: string;
+  request_id?: string;
+  resource_type?: string;
+  resource_name?: string;
+  resource_id?: string;
+  status?: string;
+  metadata?: Record<string, unknown>;
+};
+
+const TE_API_URL = (process.env.TE_API_URL || "https://app.tuningengines.com").replace(/\\/$/, "");
+const TE_INFERENCE_URL = (process.env.TE_INFERENCE_URL || "https://api.tuningengines.com/v1").replace(/\\/$/, "");
+const TE_INFERENCE_KEY = process.env.TE_INFERENCE_KEY || process.env.TE_API_KEY;
+const TE_MODEL = process.env.TE_MODEL || "auto";
+
+export function newId(prefix: string): string {
+  return prefix + "_" + randomUUID().replace(/-/g, "");
+}
+
+function requireKey(): string {
+  if (!TE_INFERENCE_KEY) {
+    throw new Error("Set TE_INFERENCE_KEY before running this starter.");
+  }
+  return TE_INFERENCE_KEY;
+}
+
+async function teFetch(url: string, init: RequestInit = {}, approvalId?: string): Promise<unknown> {
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", "Bearer " + requireKey());
+  headers.set("Content-Type", "application/json");
+  headers.set("Accept", "application/json");
+  if (approvalId) headers.set("X-TE-Approval-ID", approvalId);
+
+  const response = await fetch(url, { ...init, headers });
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) : {};
+  if (!response.ok) {
+    const error = new Error("Tuning Engines request failed: " + response.status);
+    (error as Error & { payload?: unknown }).payload = payload;
+    throw error;
+  }
+  return payload;
+}
+
+export async function chat(options: {
+  messages: Array<{ role: string; content: string }>;
+  model?: string;
+  metadata: Record<string, unknown>;
+  approvalId?: string;
+}): Promise<unknown> {
+  const requestId = String(options.metadata.request_id || newId("req"));
+  const runId = String(options.metadata.run_id || newId("run"));
+  return teFetch(
+    TE_INFERENCE_URL + "/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "X-TE-Request-ID": requestId,
+        "X-TE-Run-ID": runId,
+      },
+      body: JSON.stringify({
+        model: options.model || TE_MODEL,
+        messages: options.messages,
+        metadata: {
+          ...options.metadata,
+          request_id: requestId,
+          run_id: runId,
+          agent_run_id: runId,
+          event_type: "model.call",
+        },
+      }),
+    },
+    options.approvalId,
+  );
+}
+
+export async function callMcpTool(options: {
+  serverName: string;
+  toolName: string;
+  arguments?: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  approvalId?: string;
+}): Promise<unknown> {
+  return teFetch(
+    TE_INFERENCE_URL.replace(/\\/v1$/, "") + "/v1/mcp/tools/call",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        server_name: options.serverName,
+        tool_name: options.toolName,
+        arguments: options.arguments || {},
+        metadata: {
+          ...options.metadata,
+          event_type: "mcp.tool_call",
+        },
+      }),
+    },
+    options.approvalId,
+  );
+}
+
+export async function callAgent(options: {
+  agentName: string;
+  message: string;
+  context?: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  approvalId?: string;
+}): Promise<unknown> {
+  return teFetch(
+    TE_INFERENCE_URL.replace(/\\/v1$/, "") + "/v1/agents/" + encodeURIComponent(options.agentName) + "/message",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        message: { role: "user", content: options.message },
+        context: options.context || {},
+        metadata: {
+          ...options.metadata,
+          event_type: "agent.message",
+        },
+      }),
+    },
+    options.approvalId,
+  );
+}
+
+export async function emitTrace(options: {
+  runId: string;
+  name: string;
+  runtime: string;
+  status?: string;
+  events: TraceEvent[];
+  metadata?: Record<string, unknown>;
+}): Promise<unknown> {
+  return teFetch(TE_API_URL + "/api/v1/traces", {
+    method: "POST",
+    body: JSON.stringify({
+      run_id: options.runId,
+      name: options.name,
+      runtime: options.runtime,
+      status: options.status || "running",
+      metadata: options.metadata || {},
+      events: options.events,
+    }),
+  });
+}
+
+export async function upsertStateReference(reference: StateReference): Promise<unknown> {
+  return teFetch(TE_API_URL + "/api/v1/runtime_state_references", {
+    method: "POST",
+    body: JSON.stringify({ runtime_state_reference: reference }),
+  });
+}
+
+export function approvalRetryHint(error: unknown): string | null {
+  const payload = (error as { payload?: { error?: unknown; approval_id?: unknown; retry?: unknown } }).payload;
+  if (!payload || payload.error !== "approval_required") return null;
+  return "Approve " + String(payload.approval_id) + " in Tuning Engines, then retry with approvalId set.";
+}
+`;
+}
+
+function inngestSource(): string {
+  return `import { Inngest } from "inngest";
+import { approvalRetryHint, chat, emitTrace, newId, upsertStateReference } from "./tuning-engines.js";
+
+export const inngest = new Inngest({ id: "tuning-engines-demo" });
+
+export const governedAiWorkflow = inngest.createFunction(
+  { id: "tuning-engines-governed-ai" },
+  { event: "te/demo.requested" },
+  async ({ event, step, runId }) => {
+    const run_id = String(event.data?.run_id || "inngest_" + runId);
+    const request_id = newId("req");
+    const prompt = String(event.data?.prompt || "Say hello from a governed Inngest workflow.");
+
+    await step.run("link-inngest-state", async () => {
+      await upsertStateReference({
+        reference_type: "external_context",
+        runtime: "inngest",
+        provider: "inngest",
+        external_id: runId,
+        run_id,
+        request_id,
+        status: "active",
+        metadata: {
+          event_name: event.name,
+          function_id: "tuning-engines-governed-ai",
+        },
+      });
+    });
+
+    await emitTrace({
+      runId: run_id,
+      name: "inngest-governed-ai",
+      runtime: "inngest",
+      events: [
+        {
+          id: newId("evt"),
+          type: "workflow.step",
+          status: "started",
+          metadata: {
+            run_id,
+            request_id,
+            resource_type: "inngest_function",
+            resource_name: "tuning-engines-governed-ai",
+          },
+        },
+      ],
+    });
+
+    try {
+      const response = await step.run("governed-model-call", async () => {
+        return chat({
+          messages: [{ role: "user", content: prompt }],
+          metadata: {
+            run_id,
+            request_id,
+            runtime: "inngest",
+            resource_type: "model",
+            resource_name: "governed-model",
+          },
+        });
+      });
+
+      await emitTrace({
+        runId: run_id,
+        name: "inngest-governed-ai",
+        runtime: "inngest",
+        status: "succeeded",
+        events: [
+          {
+            id: newId("evt"),
+            type: "outcome.recorded",
+            status: "succeeded",
+            metadata: {
+              run_id,
+              request_id,
+              decision: {
+                final_action: "model.call",
+                outcome_label: "success",
+                reason_summary: "Inngest step completed through Tuning Engines.",
+                redaction_version: "decision-redacted-v1",
+              },
+            },
+          },
+        ],
+      });
+
+      return { run_id, response };
+    } catch (error) {
+      const hint = approvalRetryHint(error);
+      if (hint) {
+        await emitTrace({
+          runId: run_id,
+          name: "inngest-governed-ai",
+          runtime: "inngest",
+          status: "waiting",
+          events: [
+            {
+              id: newId("evt"),
+              type: "approval.requested",
+              status: "pending",
+              metadata: { run_id, request_id, hint },
+            },
+          ],
+        });
+      }
+      throw error;
+    }
+  },
+);
+`;
+}
+
+function triggerdevSource(): string {
+  return `import { task } from "@trigger.dev/sdk";
+import { approvalRetryHint, chat, emitTrace, newId, upsertStateReference } from "../src/tuning-engines.js";
+
+export const governedAiTask = task({
+  id: "tuning-engines-governed-ai",
+  retry: {
+    maxAttempts: 3,
+  },
+  run: async (payload: { prompt?: string; run_id?: string; approval_id?: string }, { ctx }) => {
+    const run_id = payload.run_id || "trigger_" + ctx.run.id;
+    const request_id = newId("req");
+    const prompt = payload.prompt || "Say hello from a governed Trigger.dev task.";
+
+    await upsertStateReference({
+      reference_type: "external_context",
+      runtime: "triggerdev",
+      provider: "trigger.dev",
+      external_id: ctx.run.id,
+      run_id,
+      request_id,
+      status: "active",
+      metadata: {
+        task_id: "tuning-engines-governed-ai",
+        attempt: (ctx.run as { attempt?: { number?: number } }).attempt?.number,
+      },
+    });
+
+    try {
+      const response = await chat({
+        messages: [{ role: "user", content: prompt }],
+        approvalId: payload.approval_id,
+        metadata: {
+          run_id,
+          request_id,
+          runtime: "triggerdev",
+          resource_type: "model",
+          resource_name: "governed-model",
+        },
+      });
+
+      await emitTrace({
+        runId: run_id,
+        name: "triggerdev-governed-ai",
+        runtime: "triggerdev",
+        status: "succeeded",
+        events: [
+          {
+            id: newId("evt"),
+            type: "workflow.step",
+            status: "succeeded",
+            metadata: {
+              run_id,
+              request_id,
+              resource_type: "trigger_task",
+              resource_name: "tuning-engines-governed-ai",
+            },
+          },
+          {
+            id: newId("evt"),
+            type: "outcome.recorded",
+            status: "succeeded",
+            metadata: {
+              run_id,
+              request_id,
+              decision: {
+                final_action: "model.call",
+                outcome_label: "success",
+                reason_summary: "Trigger.dev task completed through Tuning Engines.",
+                redaction_version: "decision-redacted-v1",
+              },
+            },
+          },
+        ],
+      });
+
+      return { run_id, response };
+    } catch (error) {
+      const hint = approvalRetryHint(error);
+      if (hint) {
+        await emitTrace({
+          runId: run_id,
+          name: "triggerdev-governed-ai",
+          runtime: "triggerdev",
+          status: "waiting",
+          events: [
+            {
+              id: newId("evt"),
+              type: "approval.requested",
+              status: "pending",
+              metadata: { run_id, request_id, hint },
+            },
+          ],
+        });
+      }
+      throw error;
+    }
+  },
+});
+`;
+}
+
+function hatchetSource(): string {
+  return `import { hatchet } from "../hatchet-client.js";
+import { chat, emitTrace, newId, upsertStateReference } from "../tuning-engines.js";
+
+type Input = {
+  prompt: string;
+  run_id?: string;
+  approval_id?: string;
+};
+
+type Output = {
+  "governed-model-call": {
+    run_id: string;
+    response: any;
+  };
+};
+
+export const governedAiWorkflow = hatchet.workflow<Input, Output>({
+  name: "tuning-engines-governed-ai",
+});
+
+governedAiWorkflow.task({
+  name: "governed-model-call",
+  fn: async (input) => {
+    const run_id = input.run_id || newId("hatchet");
+    const request_id = newId("req");
+
+    await upsertStateReference({
+      reference_type: "external_context",
+      runtime: "hatchet",
+      provider: "hatchet",
+      external_id: run_id,
+      run_id,
+      request_id,
+      status: "active",
+      metadata: {
+        workflow_name: "tuning-engines-governed-ai",
+        task_name: "governed-model-call",
+      },
+    });
+
+    const response = await chat({
+      messages: [{ role: "user", content: input.prompt || "Say hello from a governed Hatchet workflow." }],
+      approvalId: input.approval_id,
+      metadata: {
+        run_id,
+        request_id,
+        runtime: "hatchet",
+        resource_type: "model",
+        resource_name: "governed-model",
+      },
+    });
+
+    await emitTrace({
+      runId: run_id,
+      name: "hatchet-governed-ai",
+      runtime: "hatchet",
+      status: "succeeded",
+      events: [
+        {
+          id: newId("evt"),
+          type: "workflow.step",
+          status: "succeeded",
+          metadata: {
+            run_id,
+            request_id,
+            resource_type: "hatchet_task",
+            resource_name: "governed-model-call",
+          },
+        },
+        {
+          id: newId("evt"),
+          type: "outcome.recorded",
+          status: "succeeded",
+          metadata: {
+            run_id,
+            request_id,
+            decision: {
+              final_action: "model.call",
+              outcome_label: "success",
+              reason_summary: "Hatchet task completed through Tuning Engines.",
+              redaction_version: "decision-redacted-v1",
+            },
+          },
+        },
+      ],
+    });
+
+    return { run_id, response };
+  },
+});
+`;
+}
+
+function hatchetExtraFiles(): Record<string, string> {
+  return {
+    "src/hatchet-client.ts": `import { HatchetClient } from "@hatchet-dev/typescript-sdk";
+
+export const hatchet = HatchetClient.init();
+`,
+    "src/worker.ts": `import { hatchet } from "./hatchet-client.js";
+import { governedAiWorkflow } from "./workflows/tuning-engines-workflow.js";
+
+async function main() {
+  const worker = await hatchet.worker("tuning-engines-worker", {
+    workflows: [governedAiWorkflow],
+  });
+
+  await worker.start();
+}
+
+if (process.argv[1] === new URL(import.meta.url).pathname) {
+  main();
+}
+`,
+    "src/run.ts": `import { governedAiWorkflow } from "./workflows/tuning-engines-workflow.js";
+
+async function main() {
+  const result = await governedAiWorkflow.run({
+    prompt: "Say hello from Hatchet through Tuning Engines.",
+  });
+  console.log(result["governed-model-call"]);
+}
+
+if (process.argv[1] === new URL(import.meta.url).pathname) {
+  main().catch(console.error).finally(() => process.exit(0));
+}
+`,
+  };
+}
+
+function nodeStarterFilesWithHatchet(
+  framework: Framework,
+  entrypoint: string,
+  entrypointPath = "src/workflow.ts",
+): Record<string, string> {
+  return { ...nodeStarterFiles(framework, entrypoint, entrypointPath), ...hatchetExtraFiles() };
 }

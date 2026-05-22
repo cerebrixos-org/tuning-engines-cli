@@ -24,6 +24,13 @@ EVENT_ALIASES = {
     "human_edit": "human.edit",
     "final_action": "action.finalized",
     "outcome": "outcome.recorded",
+    "state": "state.reference",
+    "state_reference": "state.reference",
+    "runtime_state_reference": "state.reference",
+    "memory_reference": "state.reference",
+    "langgraph.checkpoint": "state.reference",
+    "temporal.workflow": "state.reference",
+    "mcp.resource": "state.reference",
 }
 
 EVENT_TYPES = {
@@ -40,6 +47,7 @@ EVENT_TYPES = {
     "human.edit",
     "action.finalized",
     "outcome.recorded",
+    "state.reference",
 }
 
 

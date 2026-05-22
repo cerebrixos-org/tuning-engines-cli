@@ -93,9 +93,12 @@ te jobs status <job-id> --watch
 # View your trained models
 te models list
 
-# Create a governed LangGraph or Temporal starter
+# Create a governed orchestration starter
 te orchestration init langgraph
 te orchestration init temporal
+te orchestration init inngest
+te orchestration init triggerdev
+te orchestration init hatchet
 ```
 
 ## MCP Server Setup
@@ -161,7 +164,7 @@ When connected, your AI assistant can:
 
 The `create_job` tool description includes full agent details and model lists, so AI assistants automatically select the right agent and model based on what you ask for.
 
-## Agent Runtime SDK: LangGraph and Temporal
+## Agent Runtime SDK and Orchestration Starters
 
 Use the CLI/MCP package when you want `npx` tools for assistants. Use the
 Python SDK when you want your own app to run durable agent workflows while
@@ -220,9 +223,10 @@ TuningAgentWorkflow = define_temporal_workflow()
 The SDK captures runtime events from LangGraph/Temporal and posts them to
 `POST /api/v1/traces`. Each event carries a `run_id`, `request_id`, and a
 normalized event type such as `model.call`, `mcp.tool_call`, `agent.message`,
-`workflow.step`, `human.edit`, `action.finalized`, or `outcome.recorded`. The
-app pairs that with inference usage, request capture, policy decisions,
-approval requests, audit, and billing logs.
+`workflow.step`, `human.edit`, `action.finalized`, `outcome.recorded`, or
+`state.reference`. The app pairs that with inference usage, request capture,
+policy decisions, approval requests, external state references, audit, and
+billing logs.
 
 For decision traces, store redacted signals in `metadata.decision`, for example
 `proposal_summary`, `changed_fields`, `change_summary`, `final_action`,
@@ -234,11 +238,17 @@ Generate a starter kit:
 ```bash
 te orchestration init langgraph --dir ./lg-te-demo
 te orchestration init temporal --dir ./temporal-te-demo
+te orchestration init inngest --dir ./inngest-te-demo
+te orchestration init triggerdev --dir ./trigger-te-demo
+te orchestration init hatchet --dir ./hatchet-te-demo
 ```
 
-The generated examples include governed model calls, trace flushing, MCP tool
-calls, registered agent calls, skill tool specs, policy context metadata,
-decision metadata, and approval retry helpers.
+LangGraph and Temporal starters use the Python runtime SDK. Inngest,
+Trigger.dev, and Hatchet starters generate TypeScript projects with a small
+self-contained Tuning Engines helper. All generated examples include governed
+model calls, trace flushing, MCP tool or registry examples, registered agent
+calls, policy context metadata, decision metadata, runtime state references,
+and approval retry helpers.
 
 ## CLI Commands
 
@@ -329,6 +339,9 @@ decision metadata, and approval retry helpers.
 |---------|-------------|
 | `te orchestration init langgraph` | Create a LangGraph starter wired to Tuning Engines governance and traces |
 | `te orchestration init temporal` | Create a Temporal worker starter wired to Tuning Engines governance and traces |
+| `te orchestration init inngest` | Create an Inngest function starter wired to Tuning Engines governance and traces |
+| `te orchestration init triggerdev` | Create a Trigger.dev task starter wired to Tuning Engines governance and traces |
+| `te orchestration init hatchet` | Create a Hatchet workflow starter wired to Tuning Engines governance and traces |
 
 ### Agents
 
