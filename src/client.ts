@@ -403,6 +403,10 @@ export class TuningEnginesClient {
     return this.request("POST", "/api/v1/traces", params);
   }
 
+  async evaluateAgentAction(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/agent_actions/evaluate", params);
+  }
+
   // --- Runtime interventions ---
 
   async listRuntimeInterventions(options?: {

@@ -61,6 +61,7 @@ const registry_1 = require("./commands/registry");
 const bulk_import_1 = require("./commands/bulk-import");
 const files_1 = require("./commands/files");
 const mcp_tools_1 = require("./commands/mcp-tools");
+const guard_1 = require("./commands/guard");
 const program = new commander_1.Command();
 program
     .name("te")
@@ -97,6 +98,7 @@ const getClient = () => {
 (0, policy_templates_1.registerPolicyTemplateCommands)(program, getClient);
 (0, policy_templates_1.registerPolicyDraftCommands)(program, getClient);
 (0, orchestration_1.registerOrchestrationCommands)(program);
+(0, guard_1.registerGuardCommands)(program, getClient);
 // MCP server subcommand
 const mcp = program
     .command("mcp")

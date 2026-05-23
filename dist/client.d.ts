@@ -170,6 +170,7 @@ export declare class TuningEnginesClient {
     }): Promise<any>;
     getTrace(runId: string): Promise<any>;
     createTrace(params: Record<string, any>): Promise<any>;
+    evaluateAgentAction(params: Record<string, any>): Promise<any>;
     listRuntimeInterventions(options?: {
         runId?: string;
         status?: string;

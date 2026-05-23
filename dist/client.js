@@ -272,6 +272,9 @@ class TuningEnginesClient {
     async createTrace(params) {
         return this.request("POST", "/api/v1/traces", params);
     }
+    async evaluateAgentAction(params) {
+        return this.request("POST", "/api/v1/agent_actions/evaluate", params);
+    }
     // --- Runtime interventions ---
     async listRuntimeInterventions(options) {
         const params = new URLSearchParams();
