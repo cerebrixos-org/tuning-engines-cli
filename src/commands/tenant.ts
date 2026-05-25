@@ -49,6 +49,16 @@ function resourceHelp(): string {
   return `Allowed resources: ${RESOURCE_NAMES.join(", ")}`;
 }
 
+async function runGovernancePolicyTest(
+  getClient: () => TuningEnginesClient,
+  id: string,
+  contextRaw: string,
+  asJson: boolean
+): Promise<void> {
+  const result = await getClient().testGovernancePolicy(id, parseJsonObject(contextRaw));
+  printResult(result, asJson);
+}
+
 function registerTypedResourceCommands(
   tenant: Command,
   getClient: () => TuningEnginesClient
@@ -275,8 +285,24 @@ export function registerTenantCommands(
     .option("--json", "Output as JSON")
     .action(async (id: string, opts) => {
       try {
-        const result = await getClient().testGovernancePolicy(id, parseJsonObject(opts.context));
-        printResult(result, opts.json);
+        await runGovernancePolicyTest(getClient, id, opts.context, opts.json);
+      } catch (err: any) {
+        console.error(err.message);
+        process.exit(1);
+      }
+    });
+
+  tenant
+    .command("test <resource> <id>")
+    .description("Compatibility alias for testing governance_policies. Prefer: te tenant test-policy <id>")
+    .requiredOption("--context <json>", "Policy evaluation context JSON object")
+    .option("--json", "Output as JSON")
+    .action(async (resource: string, id: string, opts) => {
+      try {
+        if (resource !== "governance_policies") {
+          throw new Error("te tenant test currently supports only governance_policies. Use: te tenant test-policy <policy-id> --context '<json>'");
+        }
+        await runGovernancePolicyTest(getClient, id, opts.context, opts.json);
       } catch (err: any) {
         console.error(err.message);
         process.exit(1);

@@ -413,6 +413,7 @@ stored provider keys, AWS secrets, or invitation tokens.
 | `te tenant validate guardrail_policies --data '<json>' --sample-text 'hello'` | Validate/test an unsaved simple guardrail without creating records |
 | `te tenant validate governance_policies --data '<json>' --context '<json>'` | Validate/test unsaved AGT YAML without creating records |
 | `te tenant test-policy <id> --context '<json>'` | Dry-run an AGT YAML governance policy |
+| `te tenant test governance_policies <id> --context '<json>'` | Compatibility alias for governance policy dry-runs |
 | `te tenant team list` | List tenant members, pending invitations, and allowed domains |
 | `te tenant team invite <email> --role member` | Invite a user by email; the invite token is emailed and never printed |
 | `te tenant team set-role <member-id> --inference-role-id <id>` | Assign an inference role to a member |
