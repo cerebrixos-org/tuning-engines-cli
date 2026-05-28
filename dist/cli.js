@@ -52,6 +52,9 @@ const agents_1 = require("./commands/agents");
 const tenant_1 = require("./commands/tenant");
 const approvals_1 = require("./commands/approvals");
 const traces_1 = require("./commands/traces");
+const outcomes_1 = require("./commands/outcomes");
+const insights_1 = require("./commands/insights");
+const doctor_1 = require("./commands/doctor");
 const policy_decisions_1 = require("./commands/policy-decisions");
 const policy_templates_1 = require("./commands/policy-templates");
 const orchestration_1 = require("./commands/orchestration");
@@ -89,6 +92,9 @@ const getClient = () => {
 (0, tenant_1.registerTenantCommands)(program, getClient);
 (0, approvals_1.registerApprovalCommands)(program, getClient);
 (0, traces_1.registerTraceCommands)(program, getClient);
+(0, outcomes_1.registerOutcomeCommands)(program, getClient);
+(0, insights_1.registerInsightCommands)(program, getClient);
+(0, doctor_1.registerDoctorCommands)(program, getClient);
 (0, interventions_1.registerInterventionCommands)(program, getClient);
 (0, state_1.registerStateCommands)(program, getClient);
 (0, registry_1.registerRegistryCommands)(program, getClient);
@@ -107,10 +113,11 @@ const mcp = program
 mcp
     .command("serve")
     .description("Start the MCP server (stdio transport)")
-    .action(async () => {
+    .option("--enable-registry-writes", "Enable MCP tools that write registry/review telemetry")
+    .action(async (opts) => {
     // Dynamic import to avoid loading MCP dependencies for non-MCP commands
     const { startMcpServer } = await Promise.resolve().then(() => __importStar(require("./mcp")));
-    await startMcpServer();
+    await startMcpServer({ enableRegistryWrites: Boolean(opts.enableRegistryWrites) });
 });
 program.parse();
 //# sourceMappingURL=cli.js.map

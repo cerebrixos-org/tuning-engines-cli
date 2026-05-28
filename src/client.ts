@@ -399,6 +399,41 @@ export class TuningEnginesClient {
     return this.request("GET", `/api/v1/traces/${encodeURIComponent(runId)}`);
   }
 
+  async listOutcomes(options?: { range?: string }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.range) params.set("range", options.range);
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/intelligence/observed_outcomes${qs ? `?${qs}` : ""}`);
+  }
+
+  async createOutcomeMappingRule(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/intelligence/outcome_mapping_rules", params);
+  }
+
+  async listInsights(options?: { limit?: number; offset?: number }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/agent_insights${qs ? `?${qs}` : ""}`);
+  }
+
+  async getInsight(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/agent_insights/${encodeURIComponent(id)}`);
+  }
+
+  async acceptInsight(id: string): Promise<any> {
+    return this.request("POST", `/api/v1/agent_insights/${encodeURIComponent(id)}/accept`);
+  }
+
+  async applyInsight(id: string): Promise<any> {
+    return this.request("POST", `/api/v1/agent_insights/${encodeURIComponent(id)}/apply`);
+  }
+
+  async doctorSimulate(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/inference/doctor/simulate", params);
+  }
+
   async createTrace(params: Record<string, any>): Promise<any> {
     return this.request("POST", "/api/v1/traces", params);
   }

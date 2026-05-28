@@ -259,6 +259,18 @@ normalized event type such as `model.call`, `mcp.tool_call`, `agent.message`,
 policy decisions, approval requests, external state references, audit, and
 billing logs.
 
+JavaScript/TypeScript users can also import lightweight tracing helpers from
+the npm package:
+
+```ts
+import { createOpenAIAgentsTraceAdapter } from "tuningengines-cli/adapters/openai-agents";
+import { createClaudeAgentSdkTraceAdapter } from "tuningengines-cli/adapters/claude-agent-sdk";
+```
+
+Both helpers send redacted run, model, tool, handoff, error, goal, and outcome
+events to the existing trace API. `goal_key`, `goal_status`, and `goal_score`
+are normalized into the same success-signal analytics as `outcome_key`.
+
 For decision traces, store redacted signals in `metadata.decision`, for example
 `proposal_summary`, `changed_fields`, `change_summary`, `final_action`,
 `outcome_label`, and `reason_summary`. Do not place raw prompts, provider keys,
@@ -362,6 +374,13 @@ patterns.
 | `te traces list` | List LangGraph, Temporal, and custom runtime traces |
 | `te traces show <run-id>` | Show one trace, including events, policy decisions, and approvals when linked |
 | `te traces ingest --data '<json>'` | Ingest or update a trace using a user API token or inference key |
+| `te outcomes list` | List observed outcomes, goals, evals, and workflow success signals |
+| `te outcomes record --run-id ... --key ... --label ...` | Record a success signal for a run |
+| `te outcomes map --outcome-key ... --criteria '<json>'` | Map unmapped events to an outcome key |
+| `te insights list` | List Insight Loop recommendations |
+| `te insights accept <id>` | Accept an insight as valid; does not change production |
+| `te insights apply <id>` | Apply or queue the approved action for an accepted insight |
+| `te doctor simulate --data '<json>'` | Simulate inference access, role, endpoint, policy, and resource checks |
 | `te policy-decisions list` | List AGT YAML policy decisions |
 | `te policy-decisions show <id>` | Show one policy decision with redacted context |
 | `te policy-templates list` | List curated AGT YAML policy templates |
@@ -517,6 +536,14 @@ All commands support `--json` for machine-readable output.
 | `list_traces` | List runtime traces |
 | `show_trace` | Show a trace with linked events, policy decisions, and approvals |
 | `create_trace` | Ingest a trace payload without secrets |
+| `list_outcomes` | List observed outcomes/goals normalized as success signals |
+| `list_insights` | List Insight Loop recommendations |
+| `show_insight` | Show one Insight Loop recommendation |
+| `doctor_simulate` | Simulate inference access, role, endpoint, policy, and resource checks |
+| `record_outcome` | Record an outcome/goal signal; requires `--enable-registry-writes` |
+| `map_outcome` | Create an outcome mapping rule; requires `--enable-registry-writes` |
+| `accept_insight` | Accept an insight for review; requires `--enable-registry-writes` |
+| `apply_insight` | Apply or queue an accepted insight; requires `--enable-registry-writes` |
 | `list_policy_decisions` | List AGT YAML policy decisions |
 | `show_policy_decision` | Show one decision with redacted context |
 | `list_policy_templates` | List curated AGT YAML policy templates |

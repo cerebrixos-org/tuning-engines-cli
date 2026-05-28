@@ -81,7 +81,36 @@ function parseDataObject(data, fieldName = "data") {
         throw new Error(`${fieldName} must be an object`);
     return data;
 }
-function runtimeAndGovernanceTools() {
+function compactPayload(payload) {
+    return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
+}
+function outcomeTracePayload(args) {
+    const metadata = compactPayload({
+        ...(isRecord(args.metadata) ? args.metadata : {}),
+        outcome_key: args.outcome_key,
+        outcome_label: args.outcome_label,
+        outcome_score: args.outcome_score,
+        goal_key: args.goal_key,
+        goal_status: args.goal_status,
+        signal_kind: args.goal_key && !args.outcome_key ? "goal" : undefined,
+    });
+    return {
+        run_id: args.run_id,
+        request_id: args.request_id,
+        runtime: args.runtime || "custom",
+        telemetry_source: args.source || "sdk",
+        status: "succeeded",
+        events: [
+            {
+                id: `evt_outcome_${Date.now()}`,
+                type: "outcome.recorded",
+                status: "succeeded",
+                metadata,
+            },
+        ],
+    };
+}
+function runtimeAndGovernanceTools(allowRegistryWrites = false) {
     return [
         {
             name: "list_traces",
@@ -120,6 +149,104 @@ function runtimeAndGovernanceTools() {
                 required: ["data"],
             },
         },
+        {
+            name: "list_outcomes",
+            description: "List observed outcomes, goals, workflow statuses, evals, and feedback normalized into success signals.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    range: { type: "string", description: "Optional range such as 24h, 7d, or 30d" },
+                },
+            },
+        },
+        {
+            name: "list_insights",
+            description: "List Insight Loop recommendations.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    limit: { type: "number", description: "Maximum insights (default 20)" },
+                    offset: { type: "number", description: "Offset" },
+                },
+            },
+        },
+        {
+            name: "show_insight",
+            description: "Show one Insight Loop recommendation.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    id: { type: "string", description: "Insight ID" },
+                },
+                required: ["id"],
+            },
+        },
+        {
+            name: "doctor_simulate",
+            description: "Run an Inference Doctor simulation for access, role, endpoint, policy, and resource debugging.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    payload: { type: "object", description: "Simulation payload" },
+                },
+                required: ["payload"],
+            },
+        },
+        ...(allowRegistryWrites ? [
+            {
+                name: "record_outcome",
+                description: "Record an outcome or goal success signal for a run. Requires --enable-registry-writes because it writes telemetry.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        run_id: { type: "string" },
+                        outcome_key: { type: "string" },
+                        outcome_label: { type: "string" },
+                        outcome_score: { type: "number" },
+                        goal_key: { type: "string" },
+                        goal_status: { type: "string" },
+                        request_id: { type: "string" },
+                        runtime: { type: "string" },
+                        source: { type: "string" },
+                        metadata: { type: "object" },
+                    },
+                    required: ["run_id", "outcome_key", "outcome_label"],
+                },
+            },
+            {
+                name: "map_outcome",
+                description: "Create an outcome mapping rule for events that omitted outcome_key/goal_key. Requires --enable-registry-writes.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        outcome_key: { type: "string" },
+                        match_criteria: { type: "object" },
+                        name: { type: "string" },
+                        priority: { type: "number" },
+                        enabled: { type: "boolean" },
+                    },
+                    required: ["outcome_key", "match_criteria"],
+                },
+            },
+            {
+                name: "accept_insight",
+                description: "Accept an Insight Loop recommendation as valid for review. Requires --enable-registry-writes. Does not change production.",
+                inputSchema: {
+                    type: "object",
+                    properties: { id: { type: "string" } },
+                    required: ["id"],
+                },
+            },
+            {
+                name: "apply_insight",
+                description: "Apply or queue the approved action for an accepted Insight Loop recommendation. Requires --enable-registry-writes.",
+                inputSchema: {
+                    type: "object",
+                    properties: { id: { type: "string" } },
+                    required: ["id"],
+                },
+            },
+        ] : []),
         {
             name: "list_policy_decisions",
             description: "List AGT YAML policy decisions for the current tenant. Requires tenant owner/admin API token.",
@@ -406,7 +533,8 @@ function runtimeAndGovernanceTools() {
         },
     ];
 }
-async function startMcpServer() {
+async function startMcpServer(options = {}) {
+    const allowRegistryWrites = Boolean(options.enableRegistryWrites);
     // Lazy client initialization — deferred until a tool is called.
     // This allows the server to start and list tools without a valid API key,
     // which is required for Glama inspection and tool detection.
@@ -1026,7 +1154,7 @@ async function startMcpServer() {
                     properties: {},
                 },
             },
-            ...runtimeAndGovernanceTools(),
+            ...runtimeAndGovernanceTools(allowRegistryWrites),
             // --- Agents ---
             {
                 name: "list_agents",
@@ -1306,6 +1434,51 @@ async function startMcpServer() {
                     result = await getClient().createTrace(data);
                     break;
                 }
+                case "list_outcomes":
+                    result = await getClient().listOutcomes({ range: args?.range });
+                    break;
+                case "list_insights":
+                    result = await getClient().listInsights({
+                        limit: args?.limit,
+                        offset: args?.offset,
+                    });
+                    break;
+                case "show_insight":
+                    result = await getClient().getInsight(args.id);
+                    break;
+                case "doctor_simulate":
+                    result = await getClient().doctorSimulate(args.payload);
+                    break;
+                case "record_outcome":
+                    if (!allowRegistryWrites) {
+                        throw new Error("Outcome write tools are disabled. Start MCP with --enable-registry-writes.");
+                    }
+                    result = await getClient().createTrace(outcomeTracePayload(args));
+                    break;
+                case "map_outcome":
+                    if (!allowRegistryWrites) {
+                        throw new Error("Outcome mapping tools are disabled. Start MCP with --enable-registry-writes.");
+                    }
+                    result = await getClient().createOutcomeMappingRule(compactPayload({
+                        outcome_key: args.outcome_key,
+                        match_criteria: args.match_criteria,
+                        name: args?.name,
+                        priority: args?.priority,
+                        enabled: args?.enabled,
+                    }));
+                    break;
+                case "accept_insight":
+                    if (!allowRegistryWrites) {
+                        throw new Error("Insight action tools are disabled. Start MCP with --enable-registry-writes.");
+                    }
+                    result = await getClient().acceptInsight(args.id);
+                    break;
+                case "apply_insight":
+                    if (!allowRegistryWrites) {
+                        throw new Error("Insight action tools are disabled. Start MCP with --enable-registry-writes.");
+                    }
+                    result = await getClient().applyInsight(args.id);
+                    break;
                 case "list_policy_decisions":
                     result = await getClient().listPolicyDecisions({
                         decision_action: args?.decision_action,

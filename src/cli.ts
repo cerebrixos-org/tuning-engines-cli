@@ -18,6 +18,9 @@ import { registerAgentCommands } from "./commands/agents";
 import { registerTenantCommands } from "./commands/tenant";
 import { registerApprovalCommands } from "./commands/approvals";
 import { registerTraceCommands } from "./commands/traces";
+import { registerOutcomeCommands } from "./commands/outcomes";
+import { registerInsightCommands } from "./commands/insights";
+import { registerDoctorCommands } from "./commands/doctor";
 import { registerPolicyDecisionCommands } from "./commands/policy-decisions";
 import { registerPolicyDraftCommands, registerPolicyTemplateCommands } from "./commands/policy-templates";
 import { registerOrchestrationCommands } from "./commands/orchestration";
@@ -59,6 +62,9 @@ registerAgentCommands(program, getClient);
 registerTenantCommands(program, getClient);
 registerApprovalCommands(program, getClient);
 registerTraceCommands(program, getClient);
+registerOutcomeCommands(program, getClient);
+registerInsightCommands(program, getClient);
+registerDoctorCommands(program, getClient);
 registerInterventionCommands(program, getClient);
 registerStateCommands(program, getClient);
 registerRegistryCommands(program, getClient);
@@ -80,10 +86,11 @@ registerMcpToolCommands(mcp, getClient);
 mcp
   .command("serve")
   .description("Start the MCP server (stdio transport)")
-  .action(async () => {
+  .option("--enable-registry-writes", "Enable MCP tools that write registry/review telemetry")
+  .action(async (opts) => {
     // Dynamic import to avoid loading MCP dependencies for non-MCP commands
     const { startMcpServer } = await import("./mcp");
-    await startMcpServer();
+    await startMcpServer({ enableRegistryWrites: Boolean(opts.enableRegistryWrites) });
   });
 
 program.parse();

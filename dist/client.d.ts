@@ -169,6 +169,18 @@ export declare class TuningEnginesClient {
         offset?: number;
     }): Promise<any>;
     getTrace(runId: string): Promise<any>;
+    listOutcomes(options?: {
+        range?: string;
+    }): Promise<any>;
+    createOutcomeMappingRule(params: Record<string, any>): Promise<any>;
+    listInsights(options?: {
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getInsight(id: string): Promise<any>;
+    acceptInsight(id: string): Promise<any>;
+    applyInsight(id: string): Promise<any>;
+    doctorSimulate(params: Record<string, any>): Promise<any>;
     createTrace(params: Record<string, any>): Promise<any>;
     evaluateAgentAction(params: Record<string, any>): Promise<any>;
     listRuntimeInterventions(options?: {
