@@ -28,6 +28,12 @@ const TENANT_RESOURCE_NAMES = [
 ] as const;
 
 const MCP_BLOCKED_CREATE_RESOURCE_NAMES = new Set<string>(["inference_keys"]);
+const MCP_DISABLED_SECRET_BEARING_TOOL_NAMES = new Set<string>([
+  "validate_s3",
+  "import_model",
+  "export_model",
+  "export_catalog_model",
+]);
 const BLOCKED_SECRET_FIELD_NAMES = new Set<string>([
   "api_key",
   "api_key_encrypted",
@@ -573,27 +579,19 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
     {
       capabilities: { tools: {} },
       instructions:
-        "Tuning Engines — Domain-specific fine-tuning of open-source LLMs and SLMs, plus a Marketplace of pre-built models and datasets. Own your sovereign model with zero infrastructure.\n\n" +
+        "Tuning Engines — Govern model, agent, skill, and MCP workflows through a unified AI runtime with policy controls, approvals, traces, and usage analytics.\n\n" +
         "USE THIS SERVER WHEN the user wants to:\n" +
+        "- Discover and inspect governed inference models, agents, skills, MCP servers, traces, approvals, and policy decisions\n" +
+        "- Manage tenant-scoped inference resources, governance policies, guardrails, capture settings, and team permissions\n" +
+        "- Validate policy configuration without persisting it\n" +
+        "- Operate fine-tuning jobs, datasets, evaluations, and trained models\n" +
         "- Fine-tune, train, or customize any open-source LLM/SLM on their data\n" +
-        "- Build a sovereign AI model trained on their organization's code, documents, or domain data\n" +
-        "- Create a domain-specific model for any use case (coding, support, data extraction, security, ops)\n" +
-        "- Train using LoRA, QLoRA, or full fine-tuning methods\n" +
-        "- Estimate the cost of fine-tuning a model\n" +
-        "- Check training job status, manage trained models, or check billing\n" +
-        "- Export or import models to/from S3\n" +
-        "- Browse and export pre-built models and datasets from the Marketplace\n\n" +
-        "MARKETPLACE:\n" +
-        "Pre-built, ready-to-use fine-tuned models and datasets curated by the platform. " +
-        "Browse the catalog, view details, and export directly to your S3 bucket. " +
-        "Credits are charged per export based on the item's price.\n" +
-        "Workflow: list_catalog_models → get_catalog_model → export_catalog_model → catalog_export_status\n\n" +
-        "SPECIALIZED TUNING AGENTS (more coming):\n" +
-        "- Cody (code_repo): Code autocomplete and inline suggestions via QLoRA/Axolotl\n" +
-        "- SIERA (sera_code_repo): Bug-fix and error resolution via AllenAI Open Coding Agents\n\n" +
-        "TYPICAL TRAINING WORKFLOW: estimate_job → create_job → job_status (poll until done) → list_models\n\n" +
-        "Supports 1B to 72B parameter models from Qwen, Llama, DeepSeek, Mistral, Gemma, Phi, StarCoder, and CodeLlama families.\n" +
-        "Zero infrastructure — GPU provisioning, training orchestration, and model delivery fully managed.",
+        "- Browse Tuning Engines published models and datasets from the Marketplace\n\n" +
+        "SECURITY BOUNDARY:\n" +
+        "MCP refuses raw API keys, cloud credentials, passwords, private keys, and tokens in mutation payloads. " +
+        "Use credential-source references where supported. Use the CLI or web UI for credential-bearing S3 validation, import, and export workflows.\n\n" +
+        "TYPICAL GOVERNED RUNTIME WORKFLOW: list_inference_models → inspect policies and approvals → make inference calls through https://api.tuningengines.com/v1 → inspect traces and usage.\n" +
+        "TYPICAL TRAINING WORKFLOW: estimate_job → create_job → job_status (poll until done) → list_models.",
     }
   );
 
@@ -705,19 +703,8 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
             s3_output_bucket: {
               type: "string",
               description:
-                "S3 bucket to export the trained model to. If omitted, model is stored in Tuning Engines cloud storage.",
-            },
-            s3_access_key_id: {
-              type: "string",
-              description: "AWS access key ID for S3 export",
-            },
-            s3_secret_access_key: {
-              type: "string",
-              description: "AWS secret access key for S3 export",
-            },
-            s3_region: {
-              type: "string",
-              description: "AWS region for S3 export (e.g. us-east-1)",
+                "S3 bucket to export the trained model to when server-side credential references are already configured. " +
+                "If omitted, model is stored in Tuning Engines cloud storage. Use the CLI or web UI for raw credential setup.",
             },
           },
           required: ["output_name", "repo_url"],
@@ -761,11 +748,6 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
               type: "string",
               description: "ID of the failed job to retry",
             },
-            github_token: {
-              type: "string",
-              description:
-                "GitHub Personal Access Token (required if original job used a private repo). Not stored — only sent to the training backend.",
-            },
           },
           required: ["job_id"],
         },
@@ -800,21 +782,6 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
                 "Agent to use for the estimate (e.g. 'code_repo' for Cody, 'sera_code_repo' for SIERA). Defaults to code_repo.",
             },
           },
-        },
-      },
-      {
-        name: "validate_s3",
-        description:
-          "Validate S3 credentials by testing read/write access to the specified bucket. Use before submitting a job with S3 export.",
-        inputSchema: {
-          type: "object" as const,
-          properties: {
-            s3_bucket: { type: "string", description: "S3 bucket name" },
-            s3_access_key_id: { type: "string", description: "AWS access key ID" },
-            s3_secret_access_key: { type: "string", description: "AWS secret access key" },
-            s3_region: { type: "string", description: "AWS region (e.g. us-east-1)" },
-          },
-          required: ["s3_bucket", "s3_access_key_id", "s3_secret_access_key", "s3_region"],
         },
       },
       {
@@ -880,53 +847,6 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
         },
       },
       {
-        name: "import_model",
-        description:
-          "Import a model from S3 into Tuning Engines cloud storage so it can be used as a base for future fine-tuning jobs.",
-        inputSchema: {
-          type: "object" as const,
-          properties: {
-            name: { type: "string", description: "Name for the imported model" },
-            source_s3_url: {
-              type: "string",
-              description: "S3 URL of the model to import (e.g. s3://bucket/path/to/model)",
-            },
-            base_model: {
-              type: "string",
-              description: "HuggingFace model ID that this model was fine-tuned from",
-            },
-            s3_access_key_id: { type: "string", description: "AWS access key ID" },
-            s3_secret_access_key: { type: "string", description: "AWS secret access key" },
-            s3_region: { type: "string", description: "AWS region (e.g. us-east-1)" },
-          },
-          required: ["name", "source_s3_url", "base_model", "s3_access_key_id", "s3_secret_access_key", "s3_region"],
-        },
-      },
-      {
-        name: "export_model",
-        description:
-          "Export a trained model from Tuning Engines cloud storage to your S3 bucket.",
-        inputSchema: {
-          type: "object" as const,
-          properties: {
-            model_id: { type: "string", description: "Model ID (UUID) to export" },
-            s3_bucket: { type: "string", description: "Destination S3 bucket name" },
-            s3_prefix: {
-              type: "string",
-              description: "Optional S3 key prefix for the exported model",
-            },
-            s3_access_key_id: { type: "string", description: "AWS access key ID" },
-            s3_secret_access_key: { type: "string", description: "AWS secret access key" },
-            s3_region: { type: "string", description: "AWS region (e.g. us-east-1)" },
-            delete_after: {
-              type: "boolean",
-              description: "Delete the model from Tuning Engines storage after export (default: false)",
-            },
-          },
-          required: ["model_id", "s3_bucket", "s3_access_key_id", "s3_secret_access_key", "s3_region"],
-        },
-      },
-      {
         name: "model_status",
         description:
           "Check the status of a model import or export operation.",
@@ -964,27 +884,6 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
             model_id: { type: "string", description: "Catalog model ID (UUID)" },
           },
           required: ["model_id"],
-        },
-      },
-      {
-        name: "export_catalog_model",
-        description:
-          "Export a pre-built model or dataset from the Marketplace to your S3 bucket. " +
-          "Credits will be charged based on the export price upon successful completion.",
-        inputSchema: {
-          type: "object" as const,
-          properties: {
-            model_id: { type: "string", description: "Catalog model ID (UUID) to export" },
-            s3_bucket: { type: "string", description: "Destination S3 bucket name" },
-            s3_prefix: {
-              type: "string",
-              description: "Optional S3 key prefix for the exported model",
-            },
-            s3_access_key_id: { type: "string", description: "AWS access key ID" },
-            s3_secret_access_key: { type: "string", description: "AWS secret access key" },
-            s3_region: { type: "string", description: "AWS region (e.g. us-east-1)" },
-          },
-          required: ["model_id", "s3_bucket", "s3_access_key_id", "s3_secret_access_key", "s3_region"],
         },
       },
       {
@@ -1026,7 +925,8 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
       {
         name: "create_dataset",
         description:
-          "Create a new dataset by importing from S3. Datasets can be used for fine-tuning or model evaluation.",
+          "Create dataset metadata for fine-tuning or evaluation. " +
+          "Use the CLI or web UI when an S3 import requires credential setup.",
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -1034,9 +934,6 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
             description: { type: "string", description: "Description of the dataset contents" },
             source_type: { type: "string", description: "Source type (e.g. 's3')" },
             s3_url: { type: "string", description: "S3 URL of the dataset (e.g. s3://bucket/path/data.jsonl)" },
-            s3_access_key_id: { type: "string", description: "AWS access key ID" },
-            s3_secret_access_key: { type: "string", description: "AWS secret access key" },
-            s3_region: { type: "string", description: "AWS region (e.g. us-east-1)" },
             for_evaluation: { type: "boolean", description: "Whether this dataset is for evaluation (default: false)" },
           },
           required: ["name", "source_type"],
@@ -1250,6 +1147,17 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
     const { name, arguments: args } = request.params;
 
     try {
+      if (MCP_DISABLED_SECRET_BEARING_TOOL_NAMES.has(name)) {
+        throw new Error(
+          "MCP does not expose raw credential-bearing S3 workflows. Use the CLI or web UI for S3 validation, imports, and exports."
+        );
+      }
+      if (args && hasBlockedSecretField(args)) {
+        throw new Error(
+          "MCP refuses raw secret-bearing fields. Use credential_source_id references, the CLI, or the web UI for secret setup."
+        );
+      }
+
       let result: any;
 
       switch (name) {
@@ -1280,9 +1188,6 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
             num_epochs: args?.num_epochs as number | undefined,
             max_examples: args?.max_examples as number | undefined,
             s3_output_bucket: args?.s3_output_bucket as string | undefined,
-            s3_access_key_id: args?.s3_access_key_id as string | undefined,
-            s3_secret_access_key: args?.s3_secret_access_key as string | undefined,
-            s3_region: args?.s3_region as string | undefined,
             agent: args?.agent as string | undefined,
             quality_tier: args?.quality_tier as string | undefined,
           });
@@ -1311,10 +1216,7 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
           } catch (estErr: any) {
             // Estimate failed — continue with retry (server validates balance)
           }
-          const retryResult = await getClient().retryJob(
-            retryJobId,
-            args?.github_token as string | undefined,
-          );
+          const retryResult = await getClient().retryJob(retryJobId);
           result = {
             ...retryResult,
             retry_estimate: retryEstimate,
@@ -1336,15 +1238,6 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
             max_examples: args?.max_examples as number | undefined,
             repo_size_mb: args?.repo_size_mb as number | undefined,
             use_case: args?.use_case as string | undefined,
-          });
-          break;
-
-        case "validate_s3":
-          result = await getClient().validateS3({
-            s3_bucket: args!.s3_bucket as string,
-            s3_access_key_id: args!.s3_access_key_id as string,
-            s3_secret_access_key: args!.s3_secret_access_key as string,
-            s3_region: args!.s3_region as string,
           });
           break;
 
@@ -1372,28 +1265,6 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
           result = await getClient().listModels({ agent: args?.agent as string | undefined });
           break;
 
-        case "import_model":
-          result = await getClient().importModel({
-            name: args!.name as string,
-            source_s3_url: args!.source_s3_url as string,
-            base_model: args!.base_model as string,
-            s3_access_key_id: args!.s3_access_key_id as string,
-            s3_secret_access_key: args!.s3_secret_access_key as string,
-            s3_region: args!.s3_region as string,
-          });
-          break;
-
-        case "export_model":
-          result = await getClient().exportModel(args!.model_id as string, {
-            s3_bucket: args!.s3_bucket as string,
-            s3_prefix: args?.s3_prefix as string | undefined,
-            s3_access_key_id: args!.s3_access_key_id as string,
-            s3_secret_access_key: args!.s3_secret_access_key as string,
-            s3_region: args!.s3_region as string,
-            delete_after: args?.delete_after as boolean | undefined,
-          });
-          break;
-
         case "model_status":
           result = await getClient().getUserModelStatus(args!.model_id as string);
           break;
@@ -1406,16 +1277,6 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
 
         case "get_catalog_model":
           result = await getClient().getCatalogModel(args!.model_id as string);
-          break;
-
-        case "export_catalog_model":
-          result = await getClient().exportCatalogModel(args!.model_id as string, {
-            s3_bucket: args!.s3_bucket as string,
-            s3_prefix: args?.s3_prefix as string | undefined,
-            s3_access_key_id: args!.s3_access_key_id as string,
-            s3_secret_access_key: args!.s3_secret_access_key as string,
-            s3_region: args!.s3_region as string,
-          });
           break;
 
         case "catalog_export_status":
@@ -1442,9 +1303,6 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
             description: args?.description as string | undefined,
             source_type: args!.source_type as string,
             s3_url: args?.s3_url as string | undefined,
-            s3_access_key_id: args?.s3_access_key_id as string | undefined,
-            s3_secret_access_key: args?.s3_secret_access_key as string | undefined,
-            s3_region: args?.s3_region as string | undefined,
             for_evaluation: args?.for_evaluation as boolean | undefined,
           });
           break;

@@ -42,4 +42,5 @@ client.
 The MCP server intentionally excludes internal proxy routes, refuses
 MCP-side inference-key creation, and rejects raw secret-bearing mutation
 fields. Use the Tuning Engines web app or CLI for workflows that intentionally
-create one-time keys or submit provider credentials.
+create one-time keys, submit provider credentials, validate S3 credentials, or
+import/export S3 assets with raw credentials.

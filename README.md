@@ -111,7 +111,7 @@ te orchestration init airflow
 
 The CLI includes a built-in MCP server with 60+ tools. Any AI assistant that supports MCP can fine-tune models, manage training jobs, run evaluations, check inference usage, inspect traces, review approvals, and manage non-secret tenant registry metadata through natural language.
 
-For security, the MCP server intentionally does not expose internal proxy routes. It also refuses MCP-side inference-key creation and raw secret-bearing mutation fields. Use the CLI or web UI for workflows that intentionally create one-time keys or submit raw provider secrets.
+For security, the MCP server intentionally does not expose internal proxy routes. It also refuses MCP-side inference-key creation and raw secret-bearing mutation fields. Use the CLI or web UI for workflows that intentionally create one-time keys, submit raw provider secrets, validate S3 credentials, or import/export S3 assets with raw credentials.
 
 ### Claude Desktop
 
@@ -486,7 +486,6 @@ All commands support `--json` for machine-readable output.
 | `job_status` | Live status with GPU minutes, charges, delivery progress |
 | `cancel_job` | Cancel a running/queued job |
 | `retry_job` | Retry a failed job from its last checkpoint |
-| `validate_s3` | Test S3 credentials before submitting a job |
 
 ### Models
 
@@ -495,8 +494,6 @@ All commands support `--json` for machine-readable output.
 | `list_models` | List trained and imported models |
 | `show_model` | Model details (status, size, base model, training job) |
 | `delete_model` | Delete a model from cloud storage |
-| `import_model` | Import a model from S3 |
-| `export_model` | Export a model to S3 |
 | `model_status` | Import/export progress |
 | `list_supported_models` | Available base models with GPU hours per epoch |
 
@@ -506,7 +503,6 @@ All commands support `--json` for machine-readable output.
 |------|-------------|
 | `list_catalog_models` | Browse pre-built models and datasets |
 | `get_catalog_model` | Details of a marketplace item |
-| `export_catalog_model` | Export marketplace item to S3 |
 | `catalog_export_status` | Check marketplace export progress |
 
 ### Datasets
