@@ -8,12 +8,12 @@
     "source": "github"
   },
   "websiteUrl": "https://tuningengines.com",
-  "version": "0.4.14",
+  "version": "0.4.15",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "tuningengines-cli",
-      "version": "0.4.14",
+      "version": "0.4.15",
       "transport": {
         "type": "stdio"
       },
