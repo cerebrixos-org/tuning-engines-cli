@@ -1,0 +1,12 @@
+{
+  "name": "tuning-engines",
+  "description": "Connect Claude Code to Tuning Engines for governed AI runtime and fine-tuning workflows.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Ockham Labs Inc.",
+    "email": "vc@tuningengines.com"
+  },
+  "homepage": "https://tuningengines.com",
+  "repository": "https://github.com/cerebrixos-org/tuning-engines-cli",
+  "license": "MIT"
+}
