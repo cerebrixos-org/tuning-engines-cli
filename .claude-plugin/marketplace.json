@@ -1,0 +1,18 @@
+{
+  "name": "tuning-engines",
+  "owner": {
+    "name": "Ockham Labs Inc.",
+    "email": "vc@tuningengines.com"
+  },
+  "metadata": {
+    "description": "Governed AI runtime tools for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "tuning-engines",
+      "source": "./plugins/tuning-engines",
+      "description": "Connect Claude Code to Tuning Engines for governed model, agent, skill, MCP, trace, approval, usage, and fine-tuning workflows.",
+      "version": "0.1.0"
+    }
+  ]
+}

@@ -6,9 +6,9 @@
 [![MCP Registry](https://img.shields.io/badge/MCP_Registry-tuning--engines-blue)](https://registry.modelcontextprotocol.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Own your sovereign AI model. Domain-specific fine-tuning of open-source LLMs and SLMs with total control and zero infrastructure hassle.
+Govern every AI workflow through one API.
 
-**[Tuning Engines](https://tuningengines.com)** provides specialized tuning agents to tailor top open models to your needs — fast, predictable, fully delivered. Fine-tune Qwen, Llama, DeepSeek, Mistral, Gemma, Phi, StarCoder, and CodeLlama models from 1B to 72B parameters on your data via CLI or any MCP-compatible AI assistant. LoRA, QLoRA, and full fine-tuning supported. GPU provisioning, training orchestration, and model delivery fully managed.
+**[Tuning Engines](https://tuningengines.com)** is a governed AI runtime for model, agent, skill, and MCP workflows. Route inference through one OpenAI-compatible API, apply RBAC and traffic policies, request approvals for high-risk actions, inspect traces and usage, and connect durable orchestration frameworks such as LangGraph and Temporal. The same CLI and MCP server also manage domain-specific fine-tuning of open-source models.
 
 ## Training Agents
 
@@ -135,6 +135,17 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```bash
 claude mcp add tuning-engines -- npx -y --package tuningengines-cli@latest te mcp serve
+```
+
+### Claude Code Plugin
+
+The repository also ships a Claude Code plugin wrapper around the same MCP
+server. It keeps installation discoverable while preserving the same
+`TE_API_KEY` environment-variable boundary:
+
+```bash
+claude plugin marketplace add cerebrixos-org/tuning-engines-cli
+claude plugin install tuning-engines@tuning-engines
 ```
 
 ### VS Code / Cursor / Windsurf
