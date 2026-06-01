@@ -137,6 +137,27 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 claude mcp add tuning-engines -- npx -y --package tuningengines-cli@latest te mcp serve
 ```
 
+### Work Sessions and outcomes
+
+Label the desired outcome for a project without interrupting your coding workflow:
+
+```bash
+te goal start "Fix flaky checkout retries"
+te goal show
+te goal complete --result succeeded
+```
+
+Install optional native telemetry hooks for Claude Code or Codex:
+
+```bash
+te guard claude-code install --mode observe
+te guard codex install
+```
+
+Codex project hooks require review and trust from `/hooks`. Tuning Engines sends
+pseudonymous session and transcript references by default, not transcript
+contents or local absolute paths.
+
 ### Claude Code Plugin
 
 The repository also ships a Claude Code plugin wrapper around the same MCP

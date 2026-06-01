@@ -31,6 +31,7 @@ import { registerBulkImportCommands } from "./commands/bulk-import";
 import { registerFileCommands } from "./commands/files";
 import { registerMcpToolCommands } from "./commands/mcp-tools";
 import { registerGuardCommands } from "./commands/guard";
+import { registerGoalCommands } from "./commands/goal";
 
 const program = new Command();
 
@@ -75,6 +76,7 @@ registerPolicyTemplateCommands(program, getClient);
 registerPolicyDraftCommands(program, getClient);
 registerOrchestrationCommands(program);
 registerGuardCommands(program, getClient);
+registerGoalCommands(program, getClient);
 
 // MCP server subcommand
 const mcp = program

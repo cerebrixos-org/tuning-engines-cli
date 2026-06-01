@@ -269,6 +269,15 @@ class TuningEnginesClient {
     async getTrace(runId) {
         return this.request("GET", `/api/v1/traces/${encodeURIComponent(runId)}`);
     }
+    async createOutcomeContext(params) {
+        return this.request("POST", "/api/v1/outcome-context", params);
+    }
+    async completeOutcomeContext(params) {
+        return this.request("POST", "/api/v1/outcome-context/complete", params);
+    }
+    async completeWorkItem(id) {
+        return this.request("POST", `/api/v1/work-items/${encodeURIComponent(id)}/complete`);
+    }
     async listOutcomes(options) {
         const params = new URLSearchParams();
         if (options?.range)
