@@ -9,6 +9,7 @@ import { goalMetadata, loadGoalContext } from "../goal_context";
 
 type HookMode = "enforce" | "observe";
 
+const NATIVE_EVENT_CONTRACT_VERSION = "te-native-event-v1";
 const HOOK_EVENTS = [
   "SessionStart",
   "SessionEnd",
@@ -23,6 +24,7 @@ const HOOK_EVENTS = [
 ];
 const CLINE_HOOK_EVENTS = ["TaskStart", "TaskResume", "TaskCancel", "TaskComplete", "PreToolUse", "PostToolUse", "UserPromptSubmit", "PreCompact"];
 const CODEX_HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SubagentStart", "SubagentStop"];
+const RICH_WRAPPER_RUNTIMES = new Set(["opencode", "aider", "continue", "zed", "custom"]);
 
 const SECRET_PATTERNS = [
   /\bsk-te-[A-Za-z0-9_\-]{16,}\b/g,
@@ -160,12 +162,53 @@ function hookEvent(input: Record<string, any>, explicitEvent?: string): string {
   return explicitEvent || input.hook_event_name || input.event || input.hook_event || "AgentAction";
 }
 
+function firstPresent(...values: Array<any>): string | undefined {
+  const value = values.find((candidate) => candidate !== undefined && candidate !== null && String(candidate).trim() !== "");
+  return value === undefined ? undefined : String(value);
+}
+
+function boundedId(value?: string): string | undefined {
+  return value ? value.slice(0, 200) : undefined;
+}
+
 function sessionId(input: Record<string, any>): string {
-  return String(input.session_id || input.conversation_id || input.taskId || input.task_id || input.transcript_path || process.env.CLAUDE_PROJECT_DIR || process.cwd());
+  return String(firstPresent(
+    process.env.TE_NATIVE_SESSION_ID,
+    process.env.TE_NATIVE_THREAD_ID,
+    input.session_id,
+    input.conversation_id,
+    input.taskId,
+    input.task_id,
+    input.transcript_path,
+    process.env.CLAUDE_PROJECT_DIR,
+    process.cwd()
+  ));
+}
+
+function threadId(input: Record<string, any>): string {
+  return String(firstPresent(
+    process.env.TE_NATIVE_THREAD_ID,
+    process.env.TE_NATIVE_SESSION_ID,
+    input.thread_id,
+    input.conversation_id,
+    input.session_id,
+    input.taskId,
+    input.task_id,
+    process.env.CLAUDE_PROJECT_DIR,
+    process.cwd()
+  ));
+}
+
+function eventInputId(input: Record<string, any>): string | undefined {
+  return input.event_id || input.hook_event_id || input.id || input.uuid || input.tool_use_id || input.tool_call_id || input.call_id || input.taskId || input.task_id || input.turn_id;
 }
 
 function safeSessionId(input: Record<string, any>): string {
   return sha(sessionId(input));
+}
+
+function safeThreadId(input: Record<string, any>): string {
+  return sha(threadId(input));
 }
 
 function runtimeSlug(runtime: string): string {
@@ -173,10 +216,16 @@ function runtimeSlug(runtime: string): string {
 }
 
 function runIdFor(input: Record<string, any>, runtime = "claude_code"): string {
+  const explicit = boundedId(firstPresent(input.run_id, input.te_run_id, process.env.TE_RUN_ID));
+  if (explicit) return explicit;
+
   return `run_${runtimeSlug(runtime)}_${sha(sessionId(input)).slice(0, 24)}`;
 }
 
 function requestIdFor(input: Record<string, any>, runtime = "claude_code"): string {
+  const explicit = boundedId(firstPresent(input.request_id, input.te_request_id, process.env.TE_REQUEST_ID));
+  if (explicit) return explicit;
+
   return `req_${runtimeSlug(runtime)}_${sha(sessionId(input)).slice(0, 24)}`;
 }
 
@@ -194,9 +243,9 @@ function toolResponse(input: Record<string, any>): any {
 
 function eventType(event: string): string {
   if (event === "UserPromptSubmit") return "agent.message";
-  if (event === "SessionEnd" || event === "Stop" || event === "SubagentStop" || event === "AfterTask") return "action.finalized";
+  if (event === "SessionEnd" || event === "Stop" || event === "SubagentStop" || event === "AfterTask" || event === "TaskComplete" || event === "TaskCancel") return "action.finalized";
   if (event === "PreToolUse" || event === "PostToolUse" || event === "PostToolUseFailure") return "agent.tool_call";
-  if (event === "SessionStart" || event === "UserPromptExpansion" || event === "AfterAgent") return "workflow.step";
+  if (event === "SessionStart" || event === "TaskStart" || event === "TaskResume" || event === "PreCompact" || event === "UserPromptExpansion" || event === "AfterAgent") return "workflow.step";
   if (event === "SubagentStart") return "agent.message";
   return "custom.claude_code";
 }
@@ -204,10 +253,17 @@ function eventType(event: string): string {
 function eventStatus(event: string, decision?: any): string {
   if (decision && decision.allowed === false) return "blocked";
   if (event === "PreToolUse") return "proposed";
-  if (event === "PostToolUseFailure") return "failed";
+  if (event === "PostToolUseFailure" || event === "TaskCancel") return "failed";
   if (event === "PostToolUse") return "succeeded";
-  if (event === "SessionEnd" || event === "Stop" || event === "SubagentStop" || event === "AfterTask") return "succeeded";
+  if (event === "SessionEnd" || event === "Stop" || event === "SubagentStop" || event === "AfterTask" || event === "TaskComplete") return "succeeded";
   return "started";
+}
+
+function toolExecutionPhase(event: string): string | undefined {
+  if (event === "PreToolUse") return "proposed";
+  if (event === "PostToolUse") return "executed";
+  if (event === "PostToolUseFailure") return "failed";
+  return undefined;
 }
 
 function promptSummary(input: Record<string, any>): string | undefined {
@@ -222,6 +278,40 @@ function workspaceMetadata(input: Record<string, any>): Record<string, string> {
     workspace: path.basename(rawWorkspace),
     workspace_hash: sha(rawWorkspace),
     ...(rawTranscript ? { transcript_path_hash: sha(rawTranscript) } : {}),
+  };
+}
+
+function modelEnvMetadata(): Record<string, string> {
+  const primary = firstPresent(
+    process.env.TE_MODEL,
+    process.env.ANTHROPIC_MODEL,
+    process.env.CLAUDE_MODEL,
+    process.env.OPENAI_MODEL,
+    process.env.OPENAI_API_MODEL,
+    process.env.CODEX_MODEL,
+    process.env.LLM_MODEL,
+    process.env.MODEL
+  );
+  const smallFast = firstPresent(
+    process.env.TE_SMALL_FAST_MODEL,
+    process.env.ANTHROPIC_SMALL_FAST_MODEL,
+    process.env.CLAUDE_SMALL_FAST_MODEL
+  );
+
+  return compact({
+    model: primary ? redact(primary).slice(0, 160) : undefined,
+    primary_model: primary ? redact(primary).slice(0, 160) : undefined,
+    small_fast_model: smallFast ? redact(smallFast).slice(0, 160) : undefined,
+    model_source: primary || smallFast ? "environment" : undefined,
+  });
+}
+
+function traceparentMetadata(input: Record<string, any>): Record<string, string> {
+  const traceparent = input.traceparent || input.trace_parent || input.trace?.traceparent || process.env.TRACEPARENT;
+  const tracestate = input.tracestate || input.trace_state || process.env.TRACESTATE;
+  return {
+    ...(traceparent ? { traceparent: String(traceparent) } : {}),
+    ...(tracestate ? { tracestate: String(tracestate) } : {}),
   };
 }
 
@@ -246,6 +336,76 @@ function nativeGoalMetadata(input: Record<string, any>, event: string, runtime: 
     goal_text: title,
     goal_key: normalizedGoalKey(title),
     native_goal_iteration_hash: sha(`${safeSessionId(input)}:goal:${title}`),
+  };
+}
+
+function nativeTaskSeed(input: Record<string, any>, event: string, runtime: string): string {
+  const explicit = eventInputId(input);
+  const tool = toolName(input);
+  if (explicit) return `${runtime}:task:${explicit}`;
+  if (event === "SessionStart") return `${runtime}:session:${sessionId(input)}:start`;
+  if (event === "UserPromptSubmit" || event === "UserPromptExpansion") return `${runtime}:prompt:${sessionId(input)}:${promptSummary(input) || ""}`;
+  if (event === "SubagentStart" || event === "SubagentStop") return `${runtime}:subagent:${sessionId(input)}:${input.agent_id || input.subagent_id || tool || event}`;
+  if (event === "TaskStart" || event === "TaskResume" || event === "TaskComplete" || event === "TaskCancel") return `${runtime}:task:${sessionId(input)}:${input.taskId || input.task_id || input.name || event}`;
+  return `${runtime}:event:${sessionId(input)}:${event}:${tool || input.name || ""}:${input.timestamp || input.created_at || input.started_at || ""}`;
+}
+
+function nativeParentTaskSeed(input: Record<string, any>, event: string, runtime: string): string | undefined {
+  const explicitParent = input.parent_task_id || input.parentTaskId || input.parent_tool_use_id || input.parent_tool_call_id || input.parent_event_id || input.parent_id;
+  if (explicitParent) return `${runtime}:task:${explicitParent}`;
+  if (event === "SessionStart") return undefined;
+  if (event === "PostToolUse" || event === "PostToolUseFailure") return nativeTaskSeed(input, "PreToolUse", runtime);
+  if (event === "SubagentStop") return nativeTaskSeed(input, "SubagentStart", runtime);
+  if (event === "TaskComplete" || event === "TaskCancel") return nativeTaskSeed(input, "TaskStart", runtime);
+  return `${runtime}:session:${sessionId(input)}:start`;
+}
+
+function nativeEventId(input: Record<string, any>, event: string, runtime: string): string {
+  return `evt_${sha([runtime, nativeTaskSeed(input, event, runtime), event].join(":")).slice(0, 24)}`;
+}
+
+function nativeParentEventId(input: Record<string, any>, event: string, runtime: string): string | undefined {
+  if (input.parent_event_id || input.parent_id || input.parent_client_event_id) {
+    return String(input.parent_event_id || input.parent_id || input.parent_client_event_id);
+  }
+  if (event === "SessionStart") return undefined;
+  if (event === "PostToolUse" || event === "PostToolUseFailure") return nativeEventId(input, "PreToolUse", runtime);
+  if (event === "SubagentStop") return nativeEventId(input, "SubagentStart", runtime);
+  if (event === "TaskComplete" || event === "TaskCancel") return nativeEventId(input, "TaskStart", runtime);
+  return nativeEventId(input, "SessionStart", runtime);
+}
+
+function nativeTaskId(input: Record<string, any>, event: string, runtime: string): string {
+  return `task_${sha(nativeTaskSeed(input, event, runtime)).slice(0, 24)}`;
+}
+
+function nativeParentTaskId(input: Record<string, any>, event: string, runtime: string): string | undefined {
+  const seed = nativeParentTaskSeed(input, event, runtime);
+  return seed ? `task_${sha(seed).slice(0, 24)}` : undefined;
+}
+
+function nativeEventMetadata(input: Record<string, any>, event: string, runtime: string): Record<string, any> {
+  return {
+    native_event_contract_version: NATIVE_EVENT_CONTRACT_VERSION,
+    native_correlation_source: runtime,
+    runtime,
+    framework: runtime,
+    surface: runtime,
+    coverage_level: "detailed",
+    source: `te_guard_${runtime}`,
+    session_id: safeSessionId(input),
+    native_session_id_hash: safeSessionId(input),
+    conversation_id: safeThreadId(input),
+    thread_id: safeThreadId(input),
+    task_id: nativeTaskId(input, event, runtime),
+    parent_task_id: nativeParentTaskId(input, event, runtime),
+    native_lifecycle_event: event,
+    native_event_type: eventType(event),
+    summary_source: promptSummary(input) ? "native_hook_redacted" : undefined,
+    te_tool_capture_version: toolExecutionPhase(event) ? "v1" : undefined,
+    te_tool_activity_source: toolExecutionPhase(event) ? "native_hook" : undefined,
+    te_tool_execution_phase: toolExecutionPhase(event),
+    ...traceparentMetadata(input),
   };
 }
 
@@ -282,9 +442,14 @@ function observedCommandEnv(
     TE_OUTCOME_CONTEXT_ID: activeGoal?.outcome_context_id,
     TE_OUTCOME_KEY: activeGoal?.outcome_key || activeGoal?.goal_key,
     TE_GOAL_KEY: activeGoal?.outcome_key || activeGoal?.goal_key,
+    TE_INITIATIVE_ID: process.env.TE_INITIATIVE_ID,
+    TE_NATIVE_SOURCE: runtime,
+    TE_NATIVE_SESSION_ID: ids.sessionId,
+    TE_NATIVE_THREAD_ID: ids.sessionId,
+    TE_NATIVE_TASK_ID: `sidecar:${ids.sessionId}:command`,
   };
 
-  if (runtime === "claude_code") {
+  if (runtime === "claude_code" || RICH_WRAPPER_RUNTIMES.has(runtime)) {
     const headers = String(env.ANTHROPIC_CUSTOM_HEADERS || "")
       .split(/\r?\n/)
       .map((header) => header.trim())
@@ -295,9 +460,13 @@ function observedCommandEnv(
     upsertHeader(headers, "X-TE-Outcome-Key", activeGoal?.outcome_key || activeGoal?.goal_key);
     upsertHeader(headers, "X-TE-Outcome-Context-ID", activeGoal?.outcome_context_id);
     upsertHeader(headers, "X-TE-Goal-Key", activeGoal?.outcome_key || activeGoal?.goal_key);
+    upsertHeader(headers, "X-TE-Initiative-ID", env.TE_INITIATIVE_ID);
     upsertHeader(headers, "X-TE-Native-Source", runtime);
     upsertHeader(headers, "X-TE-Native-Session-ID", ids.sessionId);
+    upsertHeader(headers, "X-TE-Native-Thread-ID", ids.sessionId);
+    upsertHeader(headers, "X-TE-Native-Task-ID", `sidecar:${ids.sessionId}:command`);
     env.ANTHROPIC_CUSTOM_HEADERS = headers.join("\n");
+    env.TE_CUSTOM_HEADERS = headers.join("\n");
   }
 
   return env;
@@ -335,12 +504,12 @@ function installOpenCode(projectDir: string): string[] {
   return [configPath, commandPath];
 }
 
-function installCline(projectDir: string): string[] {
+function installCline(projectDir: string, commandName = "cline"): string[] {
   const hookDir = path.join(projectDir, ".clinerules", "hooks");
   fs.mkdirSync(hookDir, { recursive: true });
   return CLINE_HOOK_EVENTS.map((event) => {
     const hookPath = path.join(hookDir, event);
-    fs.writeFileSync(hookPath, `#!/bin/bash\nte guard cline hook --event ${event}\necho '{"cancel":false}'\n`, { mode: 0o755 });
+    fs.writeFileSync(hookPath, `#!/bin/bash\nte guard ${commandName} hook --event ${event}\necho '{"cancel":false}'\n`, { mode: 0o755 });
     fs.chmodSync(hookPath, 0o755);
     return hookPath;
   });
@@ -378,6 +547,10 @@ async function recordSidecarRun(
   const goal = goalMetadata(undefined, ids.sessionId);
   const workspace = workspaceMetadata({});
   const safeCommand = redact(command.join(" ")).slice(0, 400);
+  const input = { session_id: ids.sessionId, command: safeCommand };
+  const lifecycleEvent = eventStatusValue === "started" ? "SessionStart" : "SessionEnd";
+  const nativeMetadata = nativeEventMetadata(input, lifecycleEvent, runtime);
+  const modelMetadata = modelEnvMetadata();
   await client.createTrace({
     run_id: ids.runId,
     request_id: ids.requestId,
@@ -389,8 +562,12 @@ async function recordSidecarRun(
       request_id: ids.requestId,
       run_id: ids.runId,
       session_id: ids.sessionId,
+      conversation_id: ids.sessionId,
+      thread_id: ids.sessionId,
       ...workspace,
       command: safeCommand,
+      ...modelMetadata,
+      ...nativeMetadata,
       framework: runtime,
       source: "te_guard_run",
       telemetry_source: "sidecar",
@@ -399,7 +576,8 @@ async function recordSidecarRun(
     },
     events: [
       {
-        id: `evt_${sha([ids.runId, eventStatusValue].join(":")).slice(0, 24)}`,
+        id: nativeEventId(input, lifecycleEvent, runtime),
+        parent_id: nativeParentEventId(input, lifecycleEvent, runtime),
         type: eventStatusValue === "started" ? "agent.message" : "action.finalized",
         status: eventStatusValue,
         at: now,
@@ -407,10 +585,14 @@ async function recordSidecarRun(
           request_id: ids.requestId,
           run_id: ids.runId,
           session_id: ids.sessionId,
+          conversation_id: ids.sessionId,
+          thread_id: ids.sessionId,
           runtime,
           source: "te_guard_run",
           telemetry_source: "sidecar",
           command: safeCommand,
+          ...modelMetadata,
+          ...nativeMetadata,
           ...workspace,
           exit_code: exitCode,
           ...goal,
@@ -423,6 +605,11 @@ async function recordSidecarRun(
 function traceRuntimeLabel(runtime: string): string {
   if (runtime === "codex") return "Codex";
   if (runtime === "claude_code") return "Claude Code";
+  if (runtime === "opencode") return "OpenCode";
+  if (runtime === "roo_code") return "Roo Code";
+  if (runtime === "aider") return "Aider";
+  if (runtime === "continue") return "Continue";
+  if (runtime === "zed") return "Zed";
   return runtime
     .split(/[_-]+/)
     .filter(Boolean)
@@ -435,15 +622,11 @@ async function recordTrace(client: TuningEnginesClient, input: Record<string, an
   const requestId = requestIdFor(input, runtime);
   const tool = toolName(input);
   const now = new Date().toISOString();
-  const eventIdBase = [
-    event,
-    sessionId(input),
-    input.tool_use_id || input.tool_call_id || tool || "",
-    now,
-  ].join(":");
   const goal = goalMetadata(input.cwd, sessionId(input));
   const nativeGoal = nativeGoalMetadata(input, event, runtime);
   const workspace = workspaceMetadata(input);
+  const nativeMetadata = nativeEventMetadata(input, event, runtime);
+  const modelMetadata = modelEnvMetadata();
 
   await client.createTrace({
     run_id: runId,
@@ -457,20 +640,23 @@ async function recordTrace(client: TuningEnginesClient, input: Record<string, an
       run_id: runId,
       telemetry_source: "sidecar",
       session_id: safeSessionId(input),
+      conversation_id: input.conversation_id || input.thread_id || sessionId(input),
+      thread_id: threadId(input),
       ...workspace,
-      framework: runtime,
-      source: `te_guard_${runtime}`,
+      ...modelMetadata,
       turn_id: input.turn_id,
       task_id: input.task_id,
       parent_task_id: input.parent_task_id,
       agent_id: input.agent_id,
       parent_agent_id: input.parent_agent_id,
+      ...nativeMetadata,
       ...goal,
       ...nativeGoal,
     },
     events: [
       {
-        id: `evt_${sha(eventIdBase).slice(0, 24)}`,
+        id: nativeEventId(input, event, runtime),
+        parent_id: nativeParentEventId(input, event, runtime),
         type: eventType(event),
         status: eventStatus(event, decision),
         at: now,
@@ -478,6 +664,8 @@ async function recordTrace(client: TuningEnginesClient, input: Record<string, an
           request_id: requestId,
           run_id: runId,
           session_id: safeSessionId(input),
+          conversation_id: input.conversation_id || input.thread_id || sessionId(input),
+          thread_id: threadId(input),
           hook_event: event,
           phase: event,
           name: tool || event,
@@ -485,12 +673,14 @@ async function recordTrace(client: TuningEnginesClient, input: Record<string, an
           tool_input: event === "PostToolUse" ? undefined : toolInput(input),
           tool_response: event === "PostToolUse" ? toolResponse(input) : undefined,
           ...workspace,
+          ...modelMetadata,
           prompt_summary: promptSummary(input),
           turn_id: input.turn_id,
           task_id: input.task_id,
           parent_task_id: input.parent_task_id,
           agent_id: input.agent_id,
           parent_agent_id: input.parent_agent_id,
+          ...nativeMetadata,
           decision,
           ...goal,
           ...nativeGoal,
@@ -544,6 +734,7 @@ export function registerGuardCommands(
     .description("Install and run Codex hook telemetry");
   const opencode = guard.command("opencode").description("Install OpenCode session tracking");
   const cline = guard.command("cline").description("Install and run Cline lifecycle hooks");
+  const roo = guard.command("roo").description("Install Roo Code lifecycle hooks");
 
   guard
     .command("run")
@@ -697,7 +888,7 @@ export function registerGuardCommands(
         writeJsonFile(settingsPath, settings);
         console.log(`Installed Codex hooks in ${settingsPath}`);
         console.log("Review and trust the project hooks from Codex /hooks before relying on native goal telemetry.");
-        console.log("Native /goal declarations will appear in Inference > Work Sessions > Diagnostics.");
+        console.log("Native /goal declarations will appear in Inference > Work Sessions.");
       } catch (err: any) {
         console.error(err.message);
         process.exit(1);
@@ -752,14 +943,14 @@ export function registerGuardCommands(
       try {
         const paths = installOpenCode(path.resolve(opts.project));
         console.log(`Installed OpenCode session tracking in ${paths.join(" and ")}`);
-        console.log("OpenCode will load opencode-helicone-session on startup; TE recognizes its pseudonymous session header.");
+        console.log("OpenCode will load opencode-helicone-session on startup; Tuning Engines recognizes its pseudonymous session header.");
       } catch (err: any) { console.error(err.message); process.exit(1); }
     });
 
   cline.command("install").description("Install Cline project hooks")
     .option("--project <dir>", "Project directory", process.cwd()).action((opts) => {
       try {
-        const paths = installCline(path.resolve(opts.project));
+        const paths = installCline(path.resolve(opts.project), "cline");
         console.log(`Installed ${paths.length} Cline hooks in ${path.dirname(paths[0])}`);
         console.log("Enable project hooks in Cline; each task will appear as one Work Session.");
       } catch (err: any) { console.error(err.message); process.exit(1); }
@@ -772,6 +963,25 @@ export function registerGuardCommands(
         await recordTrace(getClient(), input, hookEvent(input, opts.event), undefined, "cline");
       } catch (err: any) {
         console.error(`Tuning Engines Cline telemetry warning: ${err.message}`);
+      }
+    });
+
+  roo.command("install").description("Install Roo Code project hooks")
+    .option("--project <dir>", "Project directory", process.cwd()).action((opts) => {
+      try {
+        const paths = installCline(path.resolve(opts.project), "roo");
+        console.log(`Installed ${paths.length} Roo Code-compatible hooks in ${path.dirname(paths[0])}`);
+        console.log("Enable project hooks in Roo Code; each task will appear as one Work Session.");
+      } catch (err: any) { console.error(err.message); process.exit(1); }
+    });
+
+  roo.command("hook").description("Roo Code hook entrypoint. Reads hook JSON from stdin.")
+    .option("--event <event>", "Roo Code hook event name").action(async (opts) => {
+      try {
+        const input = safeJsonParse(await readStdin());
+        await recordTrace(getClient(), input, hookEvent(input, opts.event), undefined, "roo_code");
+      } catch (err: any) {
+        console.error(`Tuning Engines Roo Code telemetry warning: ${err.message}`);
       }
     });
 }
