@@ -103,7 +103,7 @@ function removeExistingGuardHooks(hooks) {
                 .map((entry) => ({
                 ...entry,
                 hooks: Array.isArray(entry.hooks)
-                    ? entry.hooks.filter((hook) => !String(hook.command || "").includes("te guard claude-code hook"))
+                    ? entry.hooks.filter((hook) => !String(hook.command || "").includes("guard claude-code hook"))
                     : entry.hooks,
             }))
                 .filter((entry) => !Array.isArray(entry.hooks) || entry.hooks.length > 0)
@@ -172,6 +172,9 @@ function compact(value, depth = 0) {
 }
 function redact(value) {
     return SECRET_PATTERNS.reduce((text, pattern) => text.replace(pattern, "[FILTERED]"), value);
+}
+function redactError(value) {
+    return redact(String(value?.message || value || "unknown error")).slice(0, 500);
 }
 function redactForOutput(value) {
     if (typeof value === "string")
@@ -537,12 +540,58 @@ function claudeInstallVerificationLines(projectDir, shared = false) {
         "Restart Claude Code from this project root and accept the hook trust review if prompted.",
     ];
 }
-function hookCommandPresent(settings, event) {
+function claudeStatusPath(projectDir) {
+    return path.join(projectDir, ".claude", "tuning-engines-hook-status.jsonl");
+}
+function appendClaudeHookStatus(projectDir, input, event, uploadStatus, error) {
+    try {
+        const status = {
+            timestamp: new Date().toISOString(),
+            event,
+            cli_version: version_1.CLI_VERSION,
+            upload_status: uploadStatus,
+            request_id: requestIdFor(input),
+            run_id: runIdFor(input),
+            error: error ? redactError(error) : undefined,
+            probe: Boolean(input.te_probe),
+        };
+        fs.mkdirSync(path.join(projectDir, ".claude"), { recursive: true });
+        fs.appendFileSync(claudeStatusPath(projectDir), `${JSON.stringify(compact(status))}\n`, { mode: 0o600 });
+    }
+    catch {
+        // Diagnostic-only; never break Claude Code because local status logging failed.
+    }
+}
+function appendClaudeHookStatusForInput(input, event, uploadStatus, error) {
+    const projectDir = path.resolve(String(input.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd()));
+    appendClaudeHookStatus(projectDir, input, event, uploadStatus, error);
+}
+function recentClaudeHookStatuses(projectDir, limit = 5) {
+    try {
+        const statusPath = claudeStatusPath(projectDir);
+        if (!fs.existsSync(statusPath))
+            return [];
+        return fs.readFileSync(statusPath, "utf-8")
+            .split(/\r?\n/)
+            .filter(Boolean)
+            .slice(-limit)
+            .map((line) => JSON.parse(line));
+    }
+    catch {
+        return [];
+    }
+}
+function installedHookCommands(settings, event) {
     const entries = Array.isArray(settings.hooks?.[event]) ? settings.hooks[event] : [];
-    return entries.some((entry) => {
+    return entries.flatMap((entry) => {
         const hooks = Array.isArray(entry?.hooks) ? entry.hooks : [];
-        return hooks.some((hook) => String(hook?.command || hook || "").includes("te guard claude-code hook"));
+        return hooks
+            .map((hook) => String(hook?.command || hook || ""))
+            .filter((command) => command.includes("guard claude-code hook"));
     });
+}
+function hookCommandPresent(settings, event) {
+    return installedHookCommands(settings, event).length > 0;
 }
 function requiredHookStatus(settings) {
     const required = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "Stop"];
@@ -598,6 +647,29 @@ function claudeDoctorRows(projectDir, shared = false) {
         check: "CLI authentication",
         detail: config.api_key ? "TE_API_KEY or saved token is present." : "No token found. Run te auth login or te config set-token before hook telemetry can upload.",
     });
+    if (process.env.ANTHROPIC_AUTH_TOKEN && process.env.ANTHROPIC_API_KEY) {
+        rows.push({
+            level: "warn",
+            check: "Claude authentication variables",
+            detail: "Both ANTHROPIC_AUTH_TOKEN and ANTHROPIC_API_KEY are set. Claude Code warns this can make auth behave unexpectedly.",
+        });
+    }
+    const recentStatuses = recentClaudeHookStatuses(projectDir);
+    const lastStatus = recentStatuses[recentStatuses.length - 1];
+    if (!lastStatus) {
+        rows.push({
+            level: "warn",
+            check: "Recent hook delivery",
+            detail: `No local hook status has been recorded yet at ${claudeStatusPath(projectDir)}. Run Claude Code after restart, or run doctor --probe.`,
+        });
+    }
+    else {
+        rows.push({
+            level: lastStatus.upload_status === "uploaded" ? "ok" : "warn",
+            check: "Recent hook delivery",
+            detail: `${lastStatus.event} ${lastStatus.upload_status} at ${lastStatus.timestamp} (${lastStatus.run_id || "no run id"}).`,
+        });
+    }
     rows.push({ level: "ok", check: "CLI version", detail: version_1.CLI_VERSION });
     rows.push({
         level: "warn",
@@ -605,6 +677,115 @@ function claudeDoctorRows(projectDir, shared = false) {
         detail: "After installing hooks, restart Claude Code from this project root and review /hooks trust settings.",
     });
     return rows;
+}
+function probePayload(projectDir, event, ids) {
+    return compact({
+        te_probe: true,
+        hook_event_name: event,
+        event,
+        cwd: projectDir,
+        session_id: ids.sessionId,
+        conversation_id: ids.sessionId,
+        thread_id: ids.sessionId,
+        run_id: ids.runId,
+        request_id: ids.requestId,
+        timestamp: new Date().toISOString(),
+        prompt: "Tuning Engines Claude Code hook probe",
+        tool_name: "TEProbeTool",
+        tool_use_id: "tool_use_te_probe",
+        tool_input: { probe: true },
+        tool_response: event === "PostToolUse" ? { ok: true, probe: true } : undefined,
+    });
+}
+function traceContainsProbeEvents(trace, requiredEvents, runId, requestId) {
+    const found = new Set();
+    let eventCount = 0;
+    const visit = (value) => {
+        if (!value || typeof value !== "object")
+            return;
+        if (Array.isArray(value)) {
+            for (const item of value)
+                visit(item);
+            return;
+        }
+        const metadata = value.metadata || {};
+        const hookEvent = value.hook_event || value.phase || value.event || value.hook_event_name || metadata.hook_event || metadata.phase || metadata.native_lifecycle_event;
+        const matchesRun = [value.run_id, metadata.run_id].filter(Boolean).includes(runId);
+        const matchesRequest = [value.request_id, metadata.request_id].filter(Boolean).includes(requestId);
+        if (hookEvent && requiredEvents.includes(String(hookEvent)) && (matchesRun || matchesRequest || JSON.stringify(value).includes(runId))) {
+            found.add(String(hookEvent));
+            eventCount += 1;
+        }
+        for (const child of Object.values(value))
+            visit(child);
+    };
+    visit(trace);
+    return { found: Array.from(found), eventCount };
+}
+async function waitForProbeTrace(client, runId, requestId, requiredEvents) {
+    let lastDetail = "";
+    for (let attempt = 1; attempt <= 8; attempt += 1) {
+        try {
+            const trace = await client.getTrace(runId);
+            const seen = traceContainsProbeEvents(trace, requiredEvents, runId, requestId);
+            if (requiredEvents.every((event) => seen.found.includes(event))) {
+                return { ok: true, detail: `Server trace includes ${seen.found.join(", ")}.`, trace };
+            }
+            lastDetail = `Server trace found ${seen.found.join(", ") || "no probe events"} on attempt ${attempt}.`;
+        }
+        catch (err) {
+            lastDetail = redactError(err);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    return { ok: false, detail: lastDetail || "Server trace was not visible after upload." };
+}
+async function runClaudeDoctorProbe(client, projectDir, shared = false) {
+    const settings = readJsonFile(claudeSettingsPath(projectDir, shared));
+    const requiredEvents = ["SessionStart", "PreToolUse", "PostToolUse"];
+    const suffix = crypto.randomBytes(8).toString("hex");
+    const ids = {
+        runId: `run_claude_probe_${suffix}`,
+        requestId: `req_claude_probe_${suffix}`,
+        sessionId: `te_probe_${suffix}`,
+    };
+    const commands = [];
+    for (const event of requiredEvents) {
+        const command = installedHookCommands(settings, event)[0];
+        if (!command) {
+            commands.push({ event, ok: false, detail: "No installed TE hook command found for this event." });
+            continue;
+        }
+        const result = (0, child_process_1.spawnSync)(command, {
+            cwd: projectDir,
+            input: JSON.stringify(probePayload(projectDir, event, ids)),
+            encoding: "utf8",
+            shell: true,
+            timeout: 30000,
+            env: { ...process.env },
+        });
+        commands.push({
+            event,
+            ok: result.status === 0,
+            command,
+            status: result.status,
+            signal: result.signal,
+            stdout: redact(String(result.stdout || "")).slice(0, 1000),
+            stderr: redact(String(result.stderr || "")).slice(0, 1000),
+            detail: result.error ? redactError(result.error) : result.status === 0 ? "Installed hook command executed." : `Installed hook command exited ${result.status}.`,
+        });
+    }
+    const commandsOk = commands.every((entry) => entry.ok);
+    const server = commandsOk
+        ? await waitForProbeTrace(client, ids.runId, ids.requestId, requiredEvents)
+        : { ok: false, detail: "Skipped server visibility check because one or more hook commands failed." };
+    return {
+        ok: commandsOk && Boolean(server.ok),
+        run_id: ids.runId,
+        request_id: ids.requestId,
+        commands,
+        server,
+    };
 }
 function installOpenCode(projectDir) {
     const configPath = path.join(projectDir, "opencode.json");
@@ -937,22 +1118,28 @@ function registerGuardCommands(program, getClient) {
         .description("Check Claude Code hook installation and common capture problems")
         .option("--project <dir>", "Project directory", process.cwd())
         .option("--shared", "Check .claude/settings.json instead of .claude/settings.local.json")
+        .option("--probe", "Execute installed hooks with synthetic events and verify server visibility")
         .option("--json", "Output as JSON")
-        .action((opts) => {
+        .action(async (opts) => {
         try {
             const { projectDir, warnings } = resolveClaudeProjectDir(opts.project);
             const rows = claudeDoctorRows(projectDir, Boolean(opts.shared));
             const ok = rows.every((row) => row.level !== "fail");
+            const probe = opts.probe && ok
+                ? await runClaudeDoctorProbe(getClient(), projectDir, Boolean(opts.shared))
+                : undefined;
+            const finalOk = ok && (!opts.probe || Boolean(probe?.ok));
             if (opts.json) {
                 output.json({
-                    ok,
+                    ok: finalOk,
                     project_dir: projectDir,
                     settings_path: claudeSettingsPath(projectDir, Boolean(opts.shared)),
                     warnings,
                     checks: rows,
+                    probe,
                     next_steps: claudeInstallVerificationLines(projectDir, Boolean(opts.shared)),
                 });
-                if (!ok)
+                if (!finalOk)
                     process.exit(1);
                 return;
             }
@@ -968,7 +1155,25 @@ function registerGuardCommands(program, getClient) {
             console.log("");
             for (const line of claudeInstallVerificationLines(projectDir, Boolean(opts.shared)))
                 console.log(line);
-            if (!ok)
+            if (opts.probe) {
+                console.log("");
+                if (!ok) {
+                    console.log("Probe skipped because static doctor checks failed.");
+                }
+                else if (probe) {
+                    console.log("Claude Code hook probe");
+                    console.log(`Run: ${probe.run_id}`);
+                    console.log(`Request: ${probe.request_id}`);
+                    for (const command of probe.commands) {
+                        const marker = command.ok ? "OK" : "FAIL";
+                        console.log(`[${marker}] ${command.event}: ${command.detail}`);
+                        if (!command.ok && command.stderr)
+                            console.log(`  ${command.stderr}`);
+                    }
+                    console.log(`[${probe.server.ok ? "OK" : "FAIL"}] Server visibility: ${probe.server.detail}`);
+                }
+            }
+            if (!finalOk)
                 process.exit(1);
         }
         catch (err) {
@@ -997,12 +1202,15 @@ function registerGuardCommands(program, getClient) {
                 decision = await evaluatePreToolUse(client, input, event, mode);
             }
             await recordTrace(client, input, event, decision);
+            appendClaudeHookStatusForInput(input, event, "uploaded");
             if (event === "PreToolUse" && decision?.allowed === false && mode === "enforce") {
+                appendClaudeHookStatusForInput(input, event, "blocked", decision.message || decision.reason || "Blocked by Tuning Engines policy");
                 console.error(decision.message || decision.reason || "Blocked by Tuning Engines policy");
                 process.exit(2);
             }
         }
         catch (err) {
+            appendClaudeHookStatusForInput(input, currentEvent || "unknown", "failed", err);
             if (currentEvent === "PreToolUse" && mode === "enforce" && !failOpen) {
                 console.error(`Tuning Engines guard unavailable: ${err.message}`);
                 process.exit(2);

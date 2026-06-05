@@ -152,12 +152,17 @@ Install optional native telemetry hooks for Claude Code or Codex:
 ```bash
 te guard claude-code install --mode observe --project .
 te guard claude-code doctor
+te guard claude-code doctor --probe
 te guard codex install
 ```
 
 Claude Code writes project-local hooks into `.claude/settings.local.json`. On
 Windows, verify with `dir .\.claude`, `type .\.claude\settings.local.json`,
 then restart Claude Code from the same project root and review `claude /hooks`.
+`doctor --probe` is available in `tuningengines-cli` 0.4.20 and later; it runs
+synthetic hook events through the installed commands and checks that the trace is
+visible to Tuning Engines. Hook invocations also write a local redacted status
+log at `.claude/tuning-engines-hook-status.jsonl`.
 Codex project hooks require review and trust from `/hooks`. Tuning Engines sends
 pseudonymous session and transcript references by default, not transcript
 contents or local absolute paths.
