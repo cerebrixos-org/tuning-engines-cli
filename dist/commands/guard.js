@@ -40,6 +40,8 @@ const crypto = __importStar(require("crypto"));
 const child_process_1 = require("child_process");
 const output = __importStar(require("../output"));
 const goal_context_1 = require("../goal_context");
+const config_1 = require("../config");
+const version_1 = require("../version");
 const NATIVE_EVENT_CONTRACT_VERSION = "te-native-event-v1";
 const HOOK_EVENTS = [
     "SessionStart",
@@ -49,9 +51,14 @@ const HOOK_EVENTS = [
     "PreToolUse",
     "PostToolUse",
     "PostToolUseFailure",
+    "PostToolBatch",
+    "PermissionDenied",
     "SubagentStart",
     "Stop",
+    "StopFailure",
     "SubagentStop",
+    "TaskCreated",
+    "TaskCompleted",
 ];
 const CLINE_HOOK_EVENTS = ["TaskStart", "TaskResume", "TaskCancel", "TaskComplete", "PreToolUse", "PostToolUse", "UserPromptSubmit", "PreCompact"];
 const CODEX_HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SubagentStart", "SubagentStop"];
@@ -81,6 +88,11 @@ function hookCommand(event, mode, failOpen) {
         pieces.push("--fail-open");
     return pieces.join(" ");
 }
+function claudeInstallModeSummary(mode, failOpen) {
+    if (mode === "observe")
+        return "observe (records activity only; tools will not be blocked)";
+    return failOpen ? "enforce (fail-open)" : "enforce (fail-closed for PreToolUse)";
+}
 function codexHookCommand(event) {
     return ["te", "guard", "codex", "hook", "--event", event].join(" ");
 }
@@ -106,7 +118,7 @@ function installHook(settings, event, mode, failOpen) {
     const entry = {
         hooks: [{ type: "command", command: hookCommand(event, mode, failOpen) }],
     };
-    if (event === "PreToolUse" || event === "PostToolUse")
+    if (event === "PreToolUse" || event === "PostToolUse" || event === "PostToolUseFailure" || event === "PermissionDenied")
         entry.matcher = "*";
     settings.hooks[event].push(entry);
 }
@@ -237,11 +249,11 @@ function toolResponse(input) {
 function eventType(event) {
     if (event === "UserPromptSubmit")
         return "agent.message";
-    if (event === "SessionEnd" || event === "Stop" || event === "SubagentStop" || event === "AfterTask" || event === "TaskComplete" || event === "TaskCancel")
+    if (event === "SessionEnd" || event === "Stop" || event === "StopFailure" || event === "SubagentStop" || event === "AfterTask" || event === "TaskComplete" || event === "TaskCompleted" || event === "TaskCancel")
         return "action.finalized";
     if (event === "PreToolUse" || event === "PostToolUse" || event === "PostToolUseFailure")
         return "agent.tool_call";
-    if (event === "SessionStart" || event === "TaskStart" || event === "TaskResume" || event === "PreCompact" || event === "UserPromptExpansion" || event === "AfterAgent")
+    if (event === "SessionStart" || event === "TaskStart" || event === "TaskCreated" || event === "TaskResume" || event === "PostToolBatch" || event === "PermissionDenied" || event === "PreCompact" || event === "UserPromptExpansion" || event === "AfterAgent")
         return "workflow.step";
     if (event === "SubagentStart")
         return "agent.message";
@@ -252,11 +264,11 @@ function eventStatus(event, decision) {
         return "blocked";
     if (event === "PreToolUse")
         return "proposed";
-    if (event === "PostToolUseFailure" || event === "TaskCancel")
+    if (event === "PostToolUseFailure" || event === "StopFailure" || event === "TaskCancel")
         return "failed";
     if (event === "PostToolUse")
         return "succeeded";
-    if (event === "SessionEnd" || event === "Stop" || event === "SubagentStop" || event === "AfterTask" || event === "TaskComplete")
+    if (event === "SessionEnd" || event === "Stop" || event === "SubagentStop" || event === "AfterTask" || event === "TaskComplete" || event === "TaskCompleted" || event === "PostToolBatch")
         return "succeeded";
     return "started";
 }
@@ -334,7 +346,7 @@ function nativeTaskSeed(input, event, runtime) {
         return `${runtime}:prompt:${sessionId(input)}:${promptSummary(input) || ""}`;
     if (event === "SubagentStart" || event === "SubagentStop")
         return `${runtime}:subagent:${sessionId(input)}:${input.agent_id || input.subagent_id || tool || event}`;
-    if (event === "TaskStart" || event === "TaskResume" || event === "TaskComplete" || event === "TaskCancel")
+    if (event === "TaskStart" || event === "TaskCreated" || event === "TaskResume" || event === "TaskComplete" || event === "TaskCompleted" || event === "TaskCancel")
         return `${runtime}:task:${sessionId(input)}:${input.taskId || input.task_id || input.name || event}`;
     return `${runtime}:event:${sessionId(input)}:${event}:${tool || input.name || ""}:${input.timestamp || input.created_at || input.started_at || ""}`;
 }
@@ -348,7 +360,7 @@ function nativeParentTaskSeed(input, event, runtime) {
         return nativeTaskSeed(input, "PreToolUse", runtime);
     if (event === "SubagentStop")
         return nativeTaskSeed(input, "SubagentStart", runtime);
-    if (event === "TaskComplete" || event === "TaskCancel")
+    if (event === "TaskComplete" || event === "TaskCompleted" || event === "TaskCancel")
         return nativeTaskSeed(input, "TaskStart", runtime);
     return `${runtime}:session:${sessionId(input)}:start`;
 }
@@ -365,7 +377,7 @@ function nativeParentEventId(input, event, runtime) {
         return nativeEventId(input, "PreToolUse", runtime);
     if (event === "SubagentStop")
         return nativeEventId(input, "SubagentStart", runtime);
-    if (event === "TaskComplete" || event === "TaskCancel")
+    if (event === "TaskComplete" || event === "TaskCompleted" || event === "TaskCancel")
         return nativeEventId(input, "TaskStart", runtime);
     return nativeEventId(input, "SessionStart", runtime);
 }
@@ -473,6 +485,126 @@ function installClaudeGoalCommand(projectDir) {
         "",
     ].join("\n"), { mode: 0o600 });
     return commandPath;
+}
+function resolveClaudeProjectDir(project) {
+    const resolved = path.resolve(project);
+    const warnings = [];
+    if (path.basename(resolved).toLowerCase() === ".claude") {
+        warnings.push(`--project pointed at a .claude folder; using its parent project directory: ${path.dirname(resolved)}`);
+        return { projectDir: path.dirname(resolved), warnings };
+    }
+    return { projectDir: resolved, warnings };
+}
+function claudeSettingsPath(projectDir, shared = false) {
+    return path.join(projectDir, ".claude", shared ? "settings.json" : "settings.local.json");
+}
+function claudeSiblingDir(projectDir) {
+    return `${projectDir}.claude`;
+}
+function findClaudeSibling(projectDir) {
+    const sibling = claudeSiblingDir(projectDir);
+    return fs.existsSync(sibling) && fs.statSync(sibling).isDirectory() ? sibling : undefined;
+}
+function copyMissingTree(source, destination) {
+    const copied = [];
+    if (!fs.existsSync(source))
+        return copied;
+    fs.mkdirSync(destination, { recursive: true });
+    for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+        const sourcePath = path.join(source, entry.name);
+        const destinationPath = path.join(destination, entry.name);
+        if (fs.existsSync(destinationPath))
+            continue;
+        if (entry.isDirectory()) {
+            fs.cpSync(sourcePath, destinationPath, { recursive: true, errorOnExist: false });
+        }
+        else if (entry.isFile()) {
+            fs.copyFileSync(sourcePath, destinationPath);
+        }
+        copied.push(destinationPath);
+    }
+    return copied;
+}
+function claudeInstallVerificationLines(projectDir, shared = false) {
+    const settingsFile = shared ? "settings.json" : "settings.local.json";
+    const projectDisplay = path.relative(process.cwd(), projectDir) || ".";
+    return [
+        "Verify on Windows PowerShell:",
+        `  cd ${projectDisplay}`,
+        "  dir .\\.claude",
+        `  type .\\.claude\\${settingsFile}`,
+        "  claude /hooks",
+        "Restart Claude Code from this project root and accept the hook trust review if prompted.",
+    ];
+}
+function hookCommandPresent(settings, event) {
+    const entries = Array.isArray(settings.hooks?.[event]) ? settings.hooks[event] : [];
+    return entries.some((entry) => {
+        const hooks = Array.isArray(entry?.hooks) ? entry.hooks : [];
+        return hooks.some((hook) => String(hook?.command || hook || "").includes("te guard claude-code hook"));
+    });
+}
+function requiredHookStatus(settings) {
+    const required = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "Stop"];
+    return {
+        missing: required.filter((event) => !hookCommandPresent(settings, event)),
+        present: required.filter((event) => hookCommandPresent(settings, event)),
+    };
+}
+function claudeDoctorRows(projectDir, shared = false) {
+    const settingsPath = claudeSettingsPath(projectDir, shared);
+    const projectClaudeDir = path.join(projectDir, ".claude");
+    const rows = [];
+    const sibling = findClaudeSibling(projectDir);
+    rows.push({ level: "ok", check: "Project directory", detail: projectDir });
+    if (sibling) {
+        rows.push({
+            level: "warn",
+            check: "Wrong sibling folder detected",
+            detail: `${sibling} exists. Claude Code expects ${projectClaudeDir}. Re-run install with --migrate-sibling to copy missing files safely.`,
+        });
+    }
+    if (!fs.existsSync(projectClaudeDir)) {
+        rows.push({ level: "fail", check: "Project .claude folder", detail: `${projectClaudeDir} does not exist.` });
+    }
+    else {
+        rows.push({ level: "ok", check: "Project .claude folder", detail: projectClaudeDir });
+    }
+    let settings = {};
+    if (!fs.existsSync(settingsPath)) {
+        rows.push({ level: "fail", check: "Claude settings", detail: `${settingsPath} does not exist.` });
+    }
+    else {
+        try {
+            settings = readJsonFile(settingsPath);
+            rows.push({ level: "ok", check: "Claude settings", detail: settingsPath });
+        }
+        catch (err) {
+            rows.push({ level: "fail", check: "Claude settings JSON", detail: err.message });
+        }
+    }
+    if (Object.keys(settings).length > 0) {
+        const hookStatus = requiredHookStatus(settings);
+        if (hookStatus.missing.length) {
+            rows.push({ level: "fail", check: "Required TE hooks", detail: `Missing: ${hookStatus.missing.join(", ")}` });
+        }
+        else {
+            rows.push({ level: "ok", check: "Required TE hooks", detail: `Present: ${hookStatus.present.join(", ")}` });
+        }
+    }
+    const config = (0, config_1.loadConfig)();
+    rows.push({
+        level: config.api_key ? "ok" : "warn",
+        check: "CLI authentication",
+        detail: config.api_key ? "TE_API_KEY or saved token is present." : "No token found. Run te auth login or te config set-token before hook telemetry can upload.",
+    });
+    rows.push({ level: "ok", check: "CLI version", detail: version_1.CLI_VERSION });
+    rows.push({
+        level: "warn",
+        check: "Claude Code restart",
+        detail: "After installing hooks, restart Claude Code from this project root and review /hooks trust settings.",
+    });
+    return rows;
 }
 function installOpenCode(projectDir) {
     const configPath = path.join(projectDir, "opencode.json");
@@ -747,27 +879,97 @@ function registerGuardCommands(program, getClient) {
         .option("--shared", "Write .claude/settings.json instead of .claude/settings.local.json")
         .option("--mode <mode>", "Hook mode: enforce or observe", "enforce")
         .option("--fail-open", "Allow tools if the guard API is unavailable")
+        .option("--migrate-sibling", "Copy missing files from an accidental sibling <project>.claude folder")
         .option("--dry-run", "Print the resulting settings without writing")
         .option("--json", "Output as JSON")
         .action((opts) => {
         try {
             const mode = opts.mode === "observe" ? "observe" : "enforce";
-            const settingsPath = path.join(path.resolve(opts.project), ".claude", opts.shared ? "settings.json" : "settings.local.json");
+            const { projectDir, warnings } = resolveClaudeProjectDir(opts.project);
+            const settingsPath = claudeSettingsPath(projectDir, Boolean(opts.shared));
+            const sibling = findClaudeSibling(projectDir);
+            const copied = opts.migrateSibling && sibling
+                ? copyMissingTree(sibling, path.join(projectDir, ".claude"))
+                : [];
             const settings = readJsonFile(settingsPath);
             settings.hooks ||= {};
             removeExistingGuardHooks(settings.hooks);
             for (const event of HOOK_EVENTS)
                 installHook(settings, event, mode, Boolean(opts.failOpen));
             if (opts.dryRun || opts.json) {
-                output.json({ path: settingsPath, settings: redactForOutput(settings) });
+                output.json({
+                    path: settingsPath,
+                    project_dir: projectDir,
+                    sibling_claude_dir: sibling,
+                    migrated_paths: copied,
+                    warnings,
+                    settings: redactForOutput(settings),
+                });
                 return;
             }
             writeJsonFile(settingsPath, settings);
-            const commandPath = installClaudeGoalCommand(path.resolve(opts.project));
+            const commandPath = installClaudeGoalCommand(projectDir);
+            for (const warning of warnings)
+                console.warn(`Warning: ${warning}`);
+            if (sibling) {
+                console.warn(`Warning: found ${sibling}, but Claude Code expects ${path.join(projectDir, ".claude")}.`);
+            }
+            if (sibling && !opts.migrateSibling) {
+                console.warn("Re-run with --migrate-sibling to copy missing commands/settings safely.");
+            }
+            if (copied.length) {
+                console.log(`Copied ${copied.length} missing item(s) from ${sibling} into ${path.join(projectDir, ".claude")}.`);
+            }
             console.log(`Installed Claude Code guard hooks in ${settingsPath}`);
             console.log(`Installed /te-goal helper in ${commandPath}`);
-            console.log(`Mode: ${mode}${opts.failOpen ? " (fail-open)" : " (fail-closed for PreToolUse)"}`);
+            console.log(`Mode: ${claudeInstallModeSummary(mode, Boolean(opts.failOpen))}`);
             console.log("Run Claude Code from this project; actions will appear in Inference > Work Sessions.");
+            for (const line of claudeInstallVerificationLines(projectDir, Boolean(opts.shared)))
+                console.log(line);
+        }
+        catch (err) {
+            console.error(err.message);
+            process.exit(1);
+        }
+    });
+    claude
+        .command("doctor")
+        .description("Check Claude Code hook installation and common capture problems")
+        .option("--project <dir>", "Project directory", process.cwd())
+        .option("--shared", "Check .claude/settings.json instead of .claude/settings.local.json")
+        .option("--json", "Output as JSON")
+        .action((opts) => {
+        try {
+            const { projectDir, warnings } = resolveClaudeProjectDir(opts.project);
+            const rows = claudeDoctorRows(projectDir, Boolean(opts.shared));
+            const ok = rows.every((row) => row.level !== "fail");
+            if (opts.json) {
+                output.json({
+                    ok,
+                    project_dir: projectDir,
+                    settings_path: claudeSettingsPath(projectDir, Boolean(opts.shared)),
+                    warnings,
+                    checks: rows,
+                    next_steps: claudeInstallVerificationLines(projectDir, Boolean(opts.shared)),
+                });
+                if (!ok)
+                    process.exit(1);
+                return;
+            }
+            console.log("Claude Code hook doctor");
+            console.log(`Project: ${projectDir}`);
+            console.log(`Settings: ${claudeSettingsPath(projectDir, Boolean(opts.shared))}`);
+            for (const warning of warnings)
+                console.warn(`Warning: ${warning}`);
+            for (const row of rows) {
+                const marker = row.level === "ok" ? "OK" : row.level === "warn" ? "WARN" : "FAIL";
+                console.log(`[${marker}] ${row.check}: ${row.detail}`);
+            }
+            console.log("");
+            for (const line of claudeInstallVerificationLines(projectDir, Boolean(opts.shared)))
+                console.log(line);
+            if (!ok)
+                process.exit(1);
         }
         catch (err) {
             console.error(err.message);

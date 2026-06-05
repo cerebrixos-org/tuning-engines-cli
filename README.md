@@ -150,10 +150,14 @@ te goal complete --result succeeded
 Install optional native telemetry hooks for Claude Code or Codex:
 
 ```bash
-te guard claude-code install --mode observe
+te guard claude-code install --mode observe --project .
+te guard claude-code doctor
 te guard codex install
 ```
 
+Claude Code writes project-local hooks into `.claude/settings.local.json`. On
+Windows, verify with `dir .\.claude`, `type .\.claude\settings.local.json`,
+then restart Claude Code from the same project root and review `claude /hooks`.
 Codex project hooks require review and trust from `/hooks`. Tuning Engines sends
 pseudonymous session and transcript references by default, not transcript
 contents or local absolute paths.
@@ -462,8 +466,8 @@ stored provider keys, AWS secrets, or invitation tokens.
 | `te tenant update <resource> <id> --data '<json>'` | Update a tenant resource from JSON |
 | `te tenant delete <resource> <id>` | Delete a tenant resource; inference keys are revoked |
 | `te tenant validate guardrail_policies --data '<json>' --sample-text 'hello'` | Validate/test an unsaved simple guardrail without creating records |
-| `te tenant validate governance_policies --data '<json>' --context '<json>'` | Validate/test unsaved AGT YAML without creating records |
-| `te tenant test-policy <id> --context '<json>'` | Dry-run an AGT YAML governance policy |
+| `te tenant validate governance_policies --data '<json>' --context '<json>'` | Validate/test an unsaved Governance Rule without creating records |
+| `te tenant test-policy <id> --context '<json>'` | Dry-run a Governance Rule |
 | `te tenant test governance_policies <id> --context '<json>'` | Compatibility alias for governance policy dry-runs |
 | `te tenant team list` | List tenant members, pending invitations, and allowed domains |
 | `te tenant team invite <email> --role member` | Invite a user by email; the invite token is emailed and never printed |
