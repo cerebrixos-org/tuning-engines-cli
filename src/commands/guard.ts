@@ -42,7 +42,7 @@ const HOOK_EVENTS = [
 ];
 const CLINE_HOOK_EVENTS = ["TaskStart", "TaskResume", "TaskCancel", "TaskComplete", "PreToolUse", "PostToolUse", "UserPromptSubmit", "PreCompact"];
 const CODEX_HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SubagentStart", "SubagentStop"];
-const RICH_WRAPPER_RUNTIMES = new Set(["opencode", "aider", "continue", "zed", "custom"]);
+const RICH_WRAPPER_RUNTIMES = new Set(["codex", "opencode", "aider", "continue", "zed", "custom"]);
 
 const SECRET_PATTERNS = [
   /\bsk-te-[A-Za-z0-9_\-]{16,}\b/g,
@@ -495,6 +495,7 @@ function observedCommandEnv(
     upsertHeader(headers, "X-TE-Native-Task-ID", `sidecar:${ids.sessionId}:command`);
     env.ANTHROPIC_CUSTOM_HEADERS = headers.join("\n");
     env.TE_CUSTOM_HEADERS = headers.join("\n");
+    env.OPENAI_EXTRA_HEADERS = headers.join("\n");
   }
 
   return env;
