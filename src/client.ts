@@ -91,20 +91,32 @@ export class TuningEnginesClient {
 
   // --- User Models ---
 
-  async listUserModels(): Promise<any> {
-    return this.request("GET", "/api/v1/user_models");
+  async listUserModels(options?: { limit?: number; offset?: number }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/user_models${qs ? `?${qs}` : ""}`);
   }
 
-  async getUserModel(modelId: string): Promise<any> {
-    return this.request("GET", `/api/v1/user_models/${modelId}`);
+  async getUserModel(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/user_models/${encodeURIComponent(id)}`);
   }
 
-  async deleteUserModel(modelId: string): Promise<any> {
-    return this.request("DELETE", `/api/v1/user_models/${modelId}`);
+  async deleteUserModel(id: string): Promise<any> {
+    return this.request("DELETE", `/api/v1/user_models/${encodeURIComponent(id)}`);
   }
 
-  async getUserModelStatus(modelId: string): Promise<any> {
-    return this.request("GET", `/api/v1/user_models/${modelId}/status`);
+  async getUserModelStatus(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/user_models/${encodeURIComponent(id)}/status`);
+  }
+
+  async importUserModel(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/user_models/import", params);
+  }
+
+  async exportUserModel(id: string, params?: Record<string, any>): Promise<any> {
+    return this.request("POST", `/api/v1/user_models/${encodeURIComponent(id)}/export`, params || {});
   }
 
   async importModel(params: {
@@ -410,6 +422,46 @@ export class TuningEnginesClient {
   async completeWorkItem(id: string): Promise<any> {
     return this.request("POST", `/api/v1/work-items/${encodeURIComponent(id)}/complete`);
   }
+
+  async listWorkItems(options?: { limit?: number; offset?: number; status?: string }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    if (options?.status) params.set("status", options.status);
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/work-items${qs ? `?${qs}` : ""}`);
+  }
+
+  async getWorkItem(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/work-items/${encodeURIComponent(id)}`);
+  }
+
+  async confirmWorkItemOutcome(id: string, params: { inference_outcome_id: number; result_status?: string; label?: string }): Promise<any> {
+    return this.request("POST", `/api/v1/work-items/${encodeURIComponent(id)}/confirm_outcome`, params);
+  }
+
+  // --- Initiatives ---
+
+  async listInitiatives(options?: { limit?: number; offset?: number }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/initiatives${qs ? `?${qs}` : ""}`);
+  }
+
+  async getInitiative(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/initiatives/${encodeURIComponent(id)}`);
+  }
+
+  async createInitiative(params: { title: string; description?: string }): Promise<any> {
+    return this.request("POST", "/api/v1/initiatives", params);
+  }
+
+  async updateInitiative(id: string, params: { title?: string; description?: string; status?: string }): Promise<any> {
+    return this.request("PATCH", `/api/v1/initiatives/${encodeURIComponent(id)}`, params);
+  }
+
 
   async listOutcomes(options?: { range?: string }): Promise<any> {
     const params = new URLSearchParams();

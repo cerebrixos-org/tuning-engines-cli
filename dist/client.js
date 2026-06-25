@@ -83,17 +83,29 @@ class TuningEnginesClient {
         return this.request("POST", "/api/v1/jobs/estimate", params);
     }
     // --- User Models ---
-    async listUserModels() {
-        return this.request("GET", "/api/v1/user_models");
+    async listUserModels(options) {
+        const params = new URLSearchParams();
+        if (options?.limit)
+            params.set("limit", String(options.limit));
+        if (options?.offset)
+            params.set("offset", String(options.offset));
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/user_models${qs ? `?${qs}` : ""}`);
     }
-    async getUserModel(modelId) {
-        return this.request("GET", `/api/v1/user_models/${modelId}`);
+    async getUserModel(id) {
+        return this.request("GET", `/api/v1/user_models/${encodeURIComponent(id)}`);
     }
-    async deleteUserModel(modelId) {
-        return this.request("DELETE", `/api/v1/user_models/${modelId}`);
+    async deleteUserModel(id) {
+        return this.request("DELETE", `/api/v1/user_models/${encodeURIComponent(id)}`);
     }
-    async getUserModelStatus(modelId) {
-        return this.request("GET", `/api/v1/user_models/${modelId}/status`);
+    async getUserModelStatus(id) {
+        return this.request("GET", `/api/v1/user_models/${encodeURIComponent(id)}/status`);
+    }
+    async importUserModel(params) {
+        return this.request("POST", "/api/v1/user_models/import", params);
+    }
+    async exportUserModel(id, params) {
+        return this.request("POST", `/api/v1/user_models/${encodeURIComponent(id)}/export`, params || {});
     }
     async importModel(params) {
         return this.request("POST", "/api/v1/user_models/import", params);
@@ -277,6 +289,42 @@ class TuningEnginesClient {
     }
     async completeWorkItem(id) {
         return this.request("POST", `/api/v1/work-items/${encodeURIComponent(id)}/complete`);
+    }
+    async listWorkItems(options) {
+        const params = new URLSearchParams();
+        if (options?.limit)
+            params.set("limit", String(options.limit));
+        if (options?.offset)
+            params.set("offset", String(options.offset));
+        if (options?.status)
+            params.set("status", options.status);
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/work-items${qs ? `?${qs}` : ""}`);
+    }
+    async getWorkItem(id) {
+        return this.request("GET", `/api/v1/work-items/${encodeURIComponent(id)}`);
+    }
+    async confirmWorkItemOutcome(id, params) {
+        return this.request("POST", `/api/v1/work-items/${encodeURIComponent(id)}/confirm_outcome`, params);
+    }
+    // --- Initiatives ---
+    async listInitiatives(options) {
+        const params = new URLSearchParams();
+        if (options?.limit)
+            params.set("limit", String(options.limit));
+        if (options?.offset)
+            params.set("offset", String(options.offset));
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/initiatives${qs ? `?${qs}` : ""}`);
+    }
+    async getInitiative(id) {
+        return this.request("GET", `/api/v1/initiatives/${encodeURIComponent(id)}`);
+    }
+    async createInitiative(params) {
+        return this.request("POST", "/api/v1/initiatives", params);
+    }
+    async updateInitiative(id, params) {
+        return this.request("PATCH", `/api/v1/initiatives/${encodeURIComponent(id)}`, params);
     }
     async listOutcomes(options) {
         const params = new URLSearchParams();

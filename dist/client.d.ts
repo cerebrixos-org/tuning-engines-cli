@@ -45,10 +45,15 @@ export declare class TuningEnginesClient {
         base_user_model_id?: string;
         use_case?: string;
     }): Promise<any>;
-    listUserModels(): Promise<any>;
-    getUserModel(modelId: string): Promise<any>;
-    deleteUserModel(modelId: string): Promise<any>;
-    getUserModelStatus(modelId: string): Promise<any>;
+    listUserModels(options?: {
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getUserModel(id: string): Promise<any>;
+    deleteUserModel(id: string): Promise<any>;
+    getUserModelStatus(id: string): Promise<any>;
+    importUserModel(params: Record<string, any>): Promise<any>;
+    exportUserModel(id: string, params?: Record<string, any>): Promise<any>;
     importModel(params: {
         name: string;
         source_s3_url: string;
@@ -179,6 +184,31 @@ export declare class TuningEnginesClient {
         result_status?: string;
     }): Promise<any>;
     completeWorkItem(id: string): Promise<any>;
+    listWorkItems(options?: {
+        limit?: number;
+        offset?: number;
+        status?: string;
+    }): Promise<any>;
+    getWorkItem(id: string): Promise<any>;
+    confirmWorkItemOutcome(id: string, params: {
+        inference_outcome_id: number;
+        result_status?: string;
+        label?: string;
+    }): Promise<any>;
+    listInitiatives(options?: {
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getInitiative(id: string): Promise<any>;
+    createInitiative(params: {
+        title: string;
+        description?: string;
+    }): Promise<any>;
+    updateInitiative(id: string, params: {
+        title?: string;
+        description?: string;
+        status?: string;
+    }): Promise<any>;
     listOutcomes(options?: {
         range?: string;
     }): Promise<any>;

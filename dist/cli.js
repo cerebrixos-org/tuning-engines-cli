@@ -66,6 +66,9 @@ const files_1 = require("./commands/files");
 const mcp_tools_1 = require("./commands/mcp-tools");
 const guard_1 = require("./commands/guard");
 const goal_1 = require("./commands/goal");
+const work_sessions_1 = require("./commands/work-sessions");
+const initiatives_1 = require("./commands/initiatives");
+const user_models_1 = require("./commands/user-models");
 const program = new commander_1.Command();
 program
     .name("te")
@@ -107,6 +110,9 @@ const getClient = () => {
 (0, orchestration_1.registerOrchestrationCommands)(program);
 (0, guard_1.registerGuardCommands)(program, getClient);
 (0, goal_1.registerGoalCommands)(program, getClient);
+(0, work_sessions_1.registerWorkSessionCommands)(program, getClient);
+(0, initiatives_1.registerInitiativeCommands)(program, getClient);
+(0, user_models_1.registerUserModelCommands)(program, getClient);
 // MCP server subcommand
 const mcp = program
     .command("mcp")
