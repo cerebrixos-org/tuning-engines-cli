@@ -326,6 +326,8 @@ export declare class TuningEnginesClient {
         limit?: number;
         offset?: number;
     }): Promise<any>;
+    listGatewayTools(): Promise<any>;
+    callGatewayTool(toolName: string, args: Record<string, any>): Promise<any>;
     rediscoverMcpServer(serverId: string): Promise<any>;
     updateMcpTool(serverId: string, toolId: string, params: {
         enabled?: boolean;

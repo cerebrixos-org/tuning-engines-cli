@@ -590,6 +590,15 @@ class TuningEnginesClient {
         const qs = params.toString();
         return this.request("GET", `/api/v1/tenant/mcp_servers/${encodeURIComponent(serverId)}/tools${qs ? `?${qs}` : ""}`);
     }
+    async listGatewayTools() {
+        return this.requestWithBearer("GET", "/v1/mcp/tools", this.apiKey);
+    }
+    async callGatewayTool(toolName, args) {
+        return this.requestWithBearer("POST", "/v1/mcp/tools/call", this.apiKey, {
+            tool_name: toolName,
+            arguments: args,
+        });
+    }
     async rediscoverMcpServer(serverId) {
         return this.request("POST", `/api/v1/tenant/mcp_servers/${encodeURIComponent(serverId)}/rediscover`);
     }

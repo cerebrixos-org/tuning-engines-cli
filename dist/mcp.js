@@ -539,6 +539,20 @@ function runtimeAndGovernanceTools(allowRegistryWrites = false) {
         },
     ];
 }
+async function fetchGatewayTools(getClient) {
+    try {
+        const result = await getClient().listGatewayTools();
+        const tools = Array.isArray(result) ? result : result?.tools || result?.data || [];
+        return tools.map((t) => ({
+            name: `gateway:${t.name || t.tool_name}`,
+            description: t.description || `Tenant tool: ${t.name || t.tool_name}`,
+            inputSchema: t.schema || t.inputSchema || { type: "object", properties: {} },
+        }));
+    }
+    catch {
+        return [];
+    }
+}
 async function startMcpServer(options = {}) {
     const allowRegistryWrites = Boolean(options.enableRegistryWrites);
     // Lazy client initialization — deferred until a tool is called.
@@ -1077,6 +1091,7 @@ async function startMcpServer(options = {}) {
                     required: ["agent_id"],
                 },
             },
+            ...(await fetchGatewayTools(getClient)),
         ],
     }));
     // Handle tool calls
@@ -1088,6 +1103,11 @@ async function startMcpServer(options = {}) {
             }
             if (args && hasBlockedSecretField(args)) {
                 throw new Error("MCP refuses raw secret-bearing fields. Use credential_source_id references, the CLI, or the web UI for secret setup.");
+            }
+            if (name.startsWith("gateway:")) {
+                const gatewayToolName = name.slice("gateway:".length);
+                const callResult = await getClient().callGatewayTool(gatewayToolName, args || {});
+                return { content: [{ type: "text", text: JSON.stringify(callResult, null, 2) }] };
             }
             let result;
             switch (name) {

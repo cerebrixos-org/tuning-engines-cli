@@ -792,6 +792,17 @@ export class TuningEnginesClient {
     return this.request("GET", `/api/v1/tenant/mcp_servers/${encodeURIComponent(serverId)}/tools${qs ? `?${qs}` : ""}`);
   }
 
+  async listGatewayTools(): Promise<any> {
+    return this.requestWithBearer("GET", "/v1/mcp/tools", this.apiKey);
+  }
+
+  async callGatewayTool(toolName: string, args: Record<string, any>): Promise<any> {
+    return this.requestWithBearer("POST", "/v1/mcp/tools/call", this.apiKey, {
+      tool_name: toolName,
+      arguments: args,
+    });
+  }
+
   async rediscoverMcpServer(serverId: string): Promise<any> {
     return this.request("POST", `/api/v1/tenant/mcp_servers/${encodeURIComponent(serverId)}/rediscover`);
   }
