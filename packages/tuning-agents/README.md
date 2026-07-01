@@ -130,47 +130,84 @@ for request in client.list_interventions(run_id=client.trace.run_id)["runtime_in
 ## Temporal
 
 Temporal provides durable execution, retries, resume-after-crash, schedules, and
-workflow history. The provided workflow is intentionally small: each LLM turn and
-MCP tool call runs as an activity, so Temporal owns durability and Tuning Engines
-owns model/tool governance.
+workflow history. The Temporal plugin registers governed activities for model
+calls, skill-tool calls, MCP tools, tenant agents, approvals, traces, runtime
+interventions, model catalog lookups, usage lookups, and external state
+references. Temporal owns durability; Tuning Engines owns governance, policy,
+usage, traces, approvals, and cost controls.
 
 ```python
 from temporalio.client import Client
 from temporalio.worker import Worker
 
 from tuning_agents.temporal import (
-    AgentRunInput,
-    agent_message_activity,
+    TuningEnginesTemporalFeatures,
     chat_completion_activity,
+    create_tuning_engines_plugin,
     define_temporal_workflow,
-    mcp_tool_activity,
 )
 
+plugin = create_tuning_engines_plugin(
+    features=TuningEnginesTemporalFeatures(
+        built_in_workflow=False,
+        model_calls=True,
+        skill_tools=True,
+        mcp_tools=True,
+        agents=True,
+        approvals=True,
+        traces=True,
+        state_references=True,
+        interventions=True,
+        model_catalog=True,
+        usage=True,
+    )
+)
 TuningAgentWorkflow = define_temporal_workflow()
 
 async def main():
-    temporal = await Client.connect("localhost:7233")
+    temporal = await Client.connect("localhost:7233", plugins=[plugin])
     worker = Worker(
         temporal,
         task_queue="tuning-agents",
         workflows=[TuningAgentWorkflow],
-        activities=[chat_completion_activity, mcp_tool_activity, agent_message_activity],
     )
     await worker.run()
 ```
 
-Start a run:
+The built-in workflow accepts `AgentRunInput`. For production, prefer setting
+`TE_INFERENCE_KEY`, `TE_API_URL`, `TE_INFERENCE_URL`, and `TE_MODEL` on the
+worker, then pass only stable run context through workflow inputs. That keeps
+provider credentials and tenant secrets out of Temporal workflow history.
+
+Start a run with the built-in workflow:
 
 ```python
 handle = await temporal.start_workflow(
     TuningAgentWorkflow.run,
     AgentRunInput(
-        api_key="sk-te-...",
+        api_key="sk-te-...",  # or omit when TE_INFERENCE_KEY is set on the worker
         model="llama-3.3-70b-fp8",
+        run_id="agent-run-001",
         messages=[{"role": "user", "content": "Check available tools and answer."}],
     ),
     id="agent-run-001",
     task_queue="tuning-agents",
+)
+```
+
+If you only want part of the integration on a worker, turn off feature flags:
+
+```python
+plugin = create_tuning_engines_plugin(
+    features=TuningEnginesTemporalFeatures(
+        built_in_workflow=False,
+        model_calls=True,
+        mcp_tools=False,
+        agents=False,
+        traces=True,
+        state_references=True,
+        interventions=False,
+    )
 )
 ```
 
