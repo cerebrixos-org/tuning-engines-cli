@@ -1,6 +1,21 @@
+from .temporal import (
+    TuningEnginesPlugin,
+    TuningEnginesTemporalFeatures,
+    TuningEnginesTemporalPluginConfig,
+    create_tuning_engines_plugin,
+)
 from .trace import TraceEvent, TraceRecorder
 
-__all__ = ["TuningClient", "TuningError", "TraceEvent", "TraceRecorder"]
+__all__ = [
+    "TuningClient",
+    "TuningError",
+    "TraceEvent",
+    "TraceRecorder",
+    "TuningEnginesPlugin",
+    "TuningEnginesTemporalFeatures",
+    "TuningEnginesTemporalPluginConfig",
+    "create_tuning_engines_plugin",
+]
 
 
 def __getattr__(name: str):
