@@ -48,3 +48,10 @@ def test_inference_key_is_not_exchanged_for_proxy_calls(monkeypatch):
     assert payload == {"ok": True}
     assert len(FakeHttpClient.calls) == 1
     assert FakeHttpClient.calls[0][2]["Authorization"] == "Bearer sk-te-inference-test"
+
+
+def test_user_agent_uses_installed_package_version():
+    client = TuningClient(api_key="sk-te-inference-test")
+
+    assert client.user_agent.startswith("tuning-agents/")
+    assert client.user_agent != "tuning-agents/0.1.0"

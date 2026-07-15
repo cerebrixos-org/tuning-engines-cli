@@ -5,6 +5,7 @@ import time
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 from urllib.parse import urlencode
 
@@ -12,6 +13,11 @@ import httpx
 from openai import OpenAI
 
 from .trace import TraceRecorder
+
+try:
+    SDK_VERSION = version("tuning-engines")
+except PackageNotFoundError:  # pragma: no cover - editable/local source tree fallback
+    SDK_VERSION = "0.1.1"
 
 
 class TuningError(RuntimeError):
@@ -30,7 +36,7 @@ class TuningClient:
     api_url: str = "https://app.tuningengines.com"
     inference_url: str = "https://api.tuningengines.com/v1"
     timeout: float = 60.0
-    user_agent: str = "tuning-agents/0.1.0"
+    user_agent: str = field(default_factory=lambda: f"tuning-agents/{SDK_VERSION}")
     trace: TraceRecorder = field(default_factory=TraceRecorder)
     _api_access_token: str | None = field(default=None, init=False, repr=False)
     _api_access_token_expires_at: float = field(default=0.0, init=False, repr=False)
