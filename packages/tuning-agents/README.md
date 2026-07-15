@@ -136,6 +136,11 @@ interventions, model catalog lookups, usage lookups, and external state
 references. Temporal owns durability; Tuning Engines owns governance, policy,
 usage, traces, approvals, and cost controls.
 
+The base Temporal plugin is deliberately a primitives plugin. Its built-in
+workflow is a minimal starter, not a canonical agent brain. If you need ReAct
+behavior parity with the LangGraph adapter, use the separate Temporal ReAct
+Streams plugin below.
+
 ```python
 from temporalio.client import Client
 from temporalio.worker import Worker
@@ -210,6 +215,75 @@ plugin = create_tuning_engines_plugin(
     )
 )
 ```
+
+## Temporal ReAct Streams
+
+Use `create_tuning_engines_react_streams_plugin` when you want Temporal
+durability plus the same ReAct/planner semantics as the LangGraph adapter. The
+workflow delegates the agent loop to `create_tuning_langgraph_agent`, so tool
+selection, stop behavior, policy context, traces, and approval retries stay
+aligned across LangGraph and Temporal. Temporal remains responsible for durable
+workflow execution, retries, signals, history, and Workflow Streams.
+
+```python
+from temporalio.client import Client
+from temporalio.worker import Worker
+
+from tuning_agents.temporal_react_streams import (
+    TemporalReactRunInput,
+    create_tuning_engines_react_streams_plugin,
+    define_temporal_react_streams_workflow,
+)
+
+plugin = create_tuning_engines_react_streams_plugin(include_workflow=False)
+TuningReactStreamsWorkflow = define_temporal_react_streams_workflow()
+
+async def main():
+    temporal = await Client.connect("localhost:7233", plugins=[plugin])
+    worker = Worker(
+        temporal,
+        task_queue="tuning-react-streams",
+        workflows=[TuningReactStreamsWorkflow],
+    )
+    await worker.run()
+```
+
+Start a streamed ReAct run:
+
+```python
+handle = await temporal.start_workflow(
+    TuningReactStreamsWorkflow.run,
+    TemporalReactRunInput(
+        api_key="sk-te-...",  # or set TE_INFERENCE_KEY on the worker
+        model="llama-3.3-70b-fp8",
+        run_id="agent-run-001",
+        request_id="req-001",
+        thread_id="customer-123",
+        messages=[{"role": "user", "content": "Use governed tools to answer."}],
+        server_names=["github"],
+        agent_names=["billing-escalation"],
+    ),
+    id="agent-run-001",
+    task_queue="tuning-react-streams",
+)
+```
+
+The workflow publishes live events to the `tuning_events` Workflow Stream:
+
+- `workflow.started`
+- `react.agent.started`
+- `react.agent.completed`
+- `react.agent.failed`
+- `workflow.completed`
+- `workflow.failed`
+
+Callers can subscribe to that stream using Temporal's Workflow Streams APIs.
+Activities publish progress with `WorkflowStreamClient.from_within_activity()`
+when the SDK preview API is available; otherwise streaming degrades to a no-op
+while the workflow still runs normally. The workflow also exposes
+`subscriber_acknowledged_terminator`; subscribers can signal it after reading a
+terminal event so the workflow can return immediately instead of waiting for the
+short safety timeout.
 
 ## Trace Semantics
 
