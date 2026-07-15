@@ -295,118 +295,84 @@ python worker.py
         "tuning-registry.yml": registryManifest("temporal"),
         "worker.py": `import asyncio
 import os
-import uuid
 from datetime import timedelta
 
-from temporalio import activity, workflow
+from temporalio import workflow
 from temporalio.client import Client
 from temporalio.worker import Worker
 
-from tuning_agents import TuningClient, TuningError
-
-
-def policy_context(resource_name: str, run_id: str) -> dict:
-    return {
-        "run_id": run_id,
-        "request_id": f"req_{uuid.uuid4().hex}",
-        "runtime": "temporal",
-        "resource_name": resource_name,
-    }
-
-
-@activity.defn
-async def governed_model_activity(prompt: str, approval_id: str | None = None) -> dict:
-    client = TuningClient(
-        api_key=os.environ["TE_INFERENCE_KEY"],
-        api_url=os.getenv("TE_API_URL", "https://app.tuningengines.com"),
-        inference_url=os.getenv("TE_INFERENCE_URL", "https://api.tuningengines.com/v1"),
-    )
-    run_id = activity.info().workflow_id
-    try:
-        response = client.chat(
-            model=os.getenv("TE_MODEL", "auto"),
-            messages=[{"role": "user", "content": prompt}],
-            metadata=policy_context("temporal-model-call", run_id),
-            approval_id=approval_id,
-        )
-        client.trace.start(
-            "state.reference",
-            {
-                "request_id": f"req_{uuid.uuid4().hex}",
-                "state_reference": {
-                    "reference_type": "temporal_workflow",
-                    "runtime": "temporal",
-                    "provider": "temporal",
-                    "external_id": run_id,
-                    "run_id": run_id,
-                    "status": "active",
-                    "metadata": {
-                        "namespace": activity.info().workflow_namespace,
-                        "task_queue": activity.info().task_queue,
-                    },
-                },
-            },
-        )
-        client.upsert_state_reference({
-            "reference_type": "temporal_workflow",
-            "runtime": "temporal",
-            "provider": "temporal",
-            "external_id": run_id,
-            "run_id": run_id,
-            "status": "active",
-            "metadata": {
-                "namespace": activity.info().workflow_namespace,
-                "task_queue": activity.info().task_queue,
-            },
-        })
-        client.trace.start(
-            "outcome.recorded",
-            {
-                "request_id": f"req_{uuid.uuid4().hex}",
-                "decision": client.trace.decision(
-                    final_action="model.call",
-                    outcome_label="success",
-                    reason_summary="Temporal activity completed through Tuning Engines.",
-                ),
-            },
-        )
-        client.flush_trace(name="temporal-governed-demo", runtime="temporal", status="succeeded")
-        return response.model_dump(mode="json") if hasattr(response, "model_dump") else response
-    except TuningError:
-        client.flush_trace(name="temporal-governed-demo", runtime="temporal", status="failed")
-        raise
-
-
-@activity.defn
-async def mcp_tool_activity(server_name: str, tool_name: str, arguments: dict) -> dict:
-    client = TuningClient(api_key=os.environ["TE_INFERENCE_KEY"])
-    return await client.acall_mcp_tool(server_name=server_name, tool_name=tool_name, arguments=arguments)
-
-
-@activity.defn
-async def agent_activity(agent_name: str, message: str) -> dict:
-    client = TuningClient(api_key=os.environ["TE_INFERENCE_KEY"])
-    return await client.acall_agent(agent_name=agent_name, message=message)
+from tuning_agents.temporal import (
+    TuningEnginesTemporalFeatures,
+    chat_completion_activity,
+    create_tuning_engines_plugin,
+    flush_trace_activity,
+    record_state_reference_activity,
+)
 
 
 @workflow.defn
 class GovernedWorkflow:
     @workflow.run
     async def run(self, prompt: str) -> dict:
-        return await workflow.execute_activity(
-            governed_model_activity,
-            prompt,
+        run_id = workflow.info().workflow_id
+        await workflow.execute_activity(
+            record_state_reference_activity,
+            {
+                "run_id": run_id,
+                "reference": {
+                    "reference_type": "temporal_workflow",
+                    "runtime": "temporal",
+                    "provider": "temporal",
+                    "external_id": run_id,
+                    "run_id": run_id,
+                    "status": "active",
+                },
+            },
+            start_to_close_timeout=timedelta(minutes=1),
+        )
+        response = await workflow.execute_activity(
+            chat_completion_activity,
+            {
+                "run_id": run_id,
+                "messages": [{"role": "user", "content": prompt}],
+                "metadata": {"runtime": "temporal", "resource_name": "temporal-model-call"},
+            },
             start_to_close_timeout=timedelta(minutes=2),
         )
+        await workflow.execute_activity(
+            flush_trace_activity,
+            {
+                "run_id": run_id,
+                "name": "temporal-governed-demo",
+                "status": "succeeded",
+                "metadata": {"workflow_id": run_id},
+            },
+            start_to_close_timeout=timedelta(minutes=1),
+        )
+        return response
 
 
 async def main() -> None:
-    temporal = await Client.connect(os.getenv("TEMPORAL_ADDRESS", "localhost:7233"))
+    plugin = create_tuning_engines_plugin(
+        features=TuningEnginesTemporalFeatures(
+            built_in_workflow=False,
+            model_calls=True,
+            mcp_tools=True,
+            agents=True,
+            skill_tools=True,
+            approvals=True,
+            traces=True,
+            state_references=True,
+            interventions=True,
+            model_catalog=True,
+            usage=True,
+        )
+    )
+    temporal = await Client.connect(os.getenv("TEMPORAL_ADDRESS", "localhost:7233"), plugins=[plugin])
     worker = Worker(
         temporal,
         task_queue=os.getenv("TEMPORAL_TASK_QUEUE", "tuning-engines-demo"),
         workflows=[GovernedWorkflow],
-        activities=[governed_model_activity, mcp_tool_activity, agent_activity],
     )
     await worker.run()
 

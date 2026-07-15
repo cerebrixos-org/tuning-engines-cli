@@ -282,14 +282,28 @@ Temporal example:
 
 ```python
 from tuning_agents.temporal import (
-    agent_message_activity,
-    chat_completion_activity,
+    TuningEnginesTemporalFeatures,
+    create_tuning_engines_plugin,
     define_temporal_workflow,
-    mcp_tool_activity,
 )
 
+plugin = create_tuning_engines_plugin(
+    features=TuningEnginesTemporalFeatures(
+        built_in_workflow=False,
+        model_calls=True,
+        skill_tools=True,
+        mcp_tools=True,
+        agents=True,
+        approvals=True,
+        traces=True,
+        state_references=True,
+        interventions=True,
+        model_catalog=True,
+        usage=True,
+    )
+)
 TuningAgentWorkflow = define_temporal_workflow()
-# Register TuningAgentWorkflow plus the three activities in your Temporal worker.
+# Pass plugin to Client.connect(..., plugins=[plugin]) and register the workflow.
 ```
 
 The SDK captures runtime events from LangGraph/Temporal and posts them to
