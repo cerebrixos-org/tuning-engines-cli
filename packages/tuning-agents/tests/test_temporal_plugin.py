@@ -1,8 +1,10 @@
 from tuning_agents.temporal import (
     AgentRunInput,
+    TuningAgentWorkflow,
     TuningEnginesTemporalFeatures,
     TuningEnginesTemporalPluginConfig,
     all_tuning_temporal_activities,
+    define_temporal_workflow,
     tuning_temporal_activity_names,
 )
 
@@ -72,3 +74,16 @@ def test_agent_run_input_carries_trace_and_approval_context():
     assert request.request_id == "req_test"
     assert request.approval_id == "apr_test"
     assert request.metadata["source"] == "unit"
+
+
+def test_builtin_workflow_is_module_scoped():
+    workflow = define_temporal_workflow()
+
+    assert workflow is TuningAgentWorkflow
+    assert "<locals>" not in workflow.__qualname__
+
+
+def test_agent_run_input_allows_worker_env_key():
+    request = AgentRunInput(model="test-model")
+
+    assert request.api_key is None

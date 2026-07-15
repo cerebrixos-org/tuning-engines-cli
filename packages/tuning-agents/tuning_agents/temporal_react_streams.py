@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any, Callable
@@ -11,6 +12,29 @@ from .temporal import (
     record_state_reference_activity,
 )
 
+try:
+    from temporalio import workflow
+except ImportError:  # pragma: no cover - temporal is an optional extra
+    class _WorkflowShim:
+        def defn(self, cls: type[Any]) -> type[Any]:
+            return cls
+
+        def init(self, fn: Callable[..., Any]) -> Callable[..., Any]:
+            return fn
+
+        def run(self, fn: Callable[..., Any]) -> Callable[..., Any]:
+            return fn
+
+        def signal(self, fn: Callable[..., Any]) -> Callable[..., Any]:
+            return fn
+
+    workflow = _WorkflowShim()
+
+try:
+    from temporalio.contrib.workflow_streams import WorkflowStream
+except ImportError:  # pragma: no cover - depends on optional Temporal preview API
+    WorkflowStream = None  # type: ignore[assignment]
+
 
 @dataclass
 class TemporalReactRunInput:
@@ -21,7 +45,7 @@ class TemporalReactRunInput:
     Temporal owns durability, retries, signals, history, and live stream output.
     """
 
-    api_key: str
+    api_key: str | None = None
     inference_url: str = "https://api.tuningengines.com/v1"
     api_url: str = "https://app.tuningengines.com"
     model: str = "auto"
@@ -88,9 +112,10 @@ async def react_agent_activity(payload: dict[str, Any]) -> dict[str, Any]:
     from .langgraph import create_tuning_langgraph_agent, invoke_with_trace
 
     client = TuningClient(
-        api_key=payload.get("api_key"),
-        api_url=payload.get("api_url") or "https://app.tuningengines.com",
-        inference_url=payload.get("inference_url") or "https://api.tuningengines.com/v1",
+        api_key=payload.get("api_key") or os.getenv("TE_INFERENCE_KEY") or os.getenv("TE_API_KEY"),
+        api_url=payload.get("api_url") or os.getenv("TE_API_URL", "https://app.tuningengines.com"),
+        inference_url=payload.get("inference_url")
+        or os.getenv("TE_INFERENCE_URL", "https://api.tuningengines.com/v1"),
     )
     if payload.get("run_id"):
         client.trace.run_id = str(payload["run_id"])
@@ -202,104 +227,139 @@ def create_tuning_engines_react_streams_plugin(
         from .temporal import tuning_temporal_activities_for
 
         activities.extend(tuning_temporal_activities_for(base_features or TuningEnginesTemporalFeatures()))
+    activities = _dedupe_activities(activities)
 
     return SimplePlugin(
         selected.name,
         activities=activities,
-        workflows=[define_temporal_react_streams_workflow()] if include_workflow else [],
+        workflows=[
+            define_temporal_react_streams_workflow(workflow_streams=selected.features.workflow_streams)
+        ]
+        if include_workflow
+        else [],
     )
 
 
 TuningEnginesReactStreamsPlugin = create_tuning_engines_react_streams_plugin
 
 
-def define_temporal_react_streams_workflow() -> type[Any]:
-    try:
-        from temporalio import workflow
-        from temporalio.contrib.workflow_streams import WorkflowStream
-    except ImportError as exc:  # pragma: no cover - depends on optional extra
-        raise ImportError("Install tuning-agents[temporal,langgraph] to use this workflow") from exc
+@workflow.defn
+class TuningReactStreamsWorkflow:
+    @workflow.init
+    def __init__(self, request: TemporalReactRunInput) -> None:
+        if WorkflowStream is None:
+            raise RuntimeError(
+                "Workflow Streams are unavailable. Install a Temporal Python SDK version "
+                "with temporalio.contrib.workflow_streams or disable workflow_streams."
+            )
+        self.stream = WorkflowStream()
+        self.events = self.stream.topic("tuning_events", type=ReactStreamEvent)
+        self.subscriber_done = False
 
-    @workflow.defn
-    class TuningReactStreamsWorkflow:
-        @workflow.init
-        def __init__(self, request: TemporalReactRunInput) -> None:
-            self.stream = WorkflowStream()
-            self.events = self.stream.topic("tuning_events", type=ReactStreamEvent)
-            self.subscriber_done = False
+    @workflow.signal
+    async def subscriber_acknowledged_terminator(self) -> None:
+        self.subscriber_done = True
 
-        @workflow.signal
-        async def subscriber_acknowledged_terminator(self) -> None:
-            self.subscriber_done = True
-
-        @workflow.run
-        async def run(self, request: TemporalReactRunInput) -> TemporalReactRunResult:
+    @workflow.run
+    async def run(self, request: TemporalReactRunInput) -> TemporalReactRunResult:
+        self.events.publish(
+            ReactStreamEvent(
+                type="workflow.started",
+                run_id=request.run_id,
+                request_id=request.request_id,
+                status="running",
+                message="Temporal ReAct workflow started",
+                metadata={"thread_id": request.thread_id, **request.metadata},
+            )
+        )
+        try:
+            result = await _execute_react_activity(request)
             self.events.publish(
                 ReactStreamEvent(
-                    type="workflow.started",
+                    type="workflow.completed",
                     run_id=request.run_id,
                     request_id=request.request_id,
-                    status="running",
-                    message="Temporal ReAct workflow started",
-                    metadata={"thread_id": request.thread_id, **request.metadata},
+                    status="succeeded",
+                    message="Temporal ReAct workflow completed",
                 )
             )
-            try:
-                result = await workflow.execute_activity(
-                    react_agent_activity,
-                    {
-                        "api_key": request.api_key,
-                        "api_url": request.api_url,
-                        "inference_url": request.inference_url,
-                        "model": request.model,
-                        "messages": request.messages,
-                        "prompt": request.prompt,
-                        "run_id": request.run_id,
-                        "request_id": request.request_id,
-                        "thread_id": request.thread_id,
-                        "server_names": request.server_names,
-                        "tool_names": request.tool_names,
-                        "agent_names": request.agent_names,
-                        "agent_descriptions": request.agent_descriptions,
-                        "approval_id": request.approval_id,
-                        "metadata": request.metadata,
-                    },
-                    start_to_close_timeout=timedelta(minutes=10),
+            await self._wait_for_subscriber_ack()
+            return _result_from_activity(result)
+        except Exception as exc:
+            self.events.publish(
+                ReactStreamEvent(
+                    type="workflow.failed",
+                    run_id=request.run_id,
+                    request_id=request.request_id,
+                    status="failed",
+                    message=str(exc),
                 )
-                self.events.publish(
-                    ReactStreamEvent(
-                        type="workflow.completed",
-                        run_id=request.run_id,
-                        request_id=request.request_id,
-                        status="succeeded",
-                        message="Temporal ReAct workflow completed",
-                    )
-                )
-                await self._wait_for_subscriber_ack()
-                return TemporalReactRunResult(
-                    output=result.get("result"),
-                    trace=result.get("trace") or {"events": []},
-                )
-            except Exception as exc:
-                self.events.publish(
-                    ReactStreamEvent(
-                        type="workflow.failed",
-                        run_id=request.run_id,
-                        request_id=request.request_id,
-                        status="failed",
-                        message=str(exc),
-                    )
-                )
-                await self._wait_for_subscriber_ack()
-                raise
+            )
+            await self._wait_for_subscriber_ack()
+            raise
 
-        async def _wait_for_subscriber_ack(self) -> None:
-            try:
-                await workflow.wait_condition(
-                    lambda: self.subscriber_done,
-                    timeout=timedelta(seconds=30),
-                )
-            except TimeoutError:
-                pass
+    async def _wait_for_subscriber_ack(self) -> None:
+        try:
+            await workflow.wait_condition(
+                lambda: self.subscriber_done,
+                timeout=timedelta(seconds=30),
+            )
+        except TimeoutError:
+            pass
 
-    return TuningReactStreamsWorkflow
+
+@workflow.defn
+class TuningReactWorkflow:
+    @workflow.run
+    async def run(self, request: TemporalReactRunInput) -> TemporalReactRunResult:
+        return _result_from_activity(await _execute_react_activity(request))
+
+
+def define_temporal_react_streams_workflow(*, workflow_streams: bool = True) -> type[Any]:
+    """Return an importable module-scope ReAct workflow class."""
+
+    return TuningReactStreamsWorkflow if workflow_streams else TuningReactWorkflow
+
+
+async def _execute_react_activity(request: TemporalReactRunInput) -> dict[str, Any]:
+    return await workflow.execute_activity(
+        react_agent_activity,
+        {
+            "api_key": request.api_key,
+            "api_url": request.api_url,
+            "inference_url": request.inference_url,
+            "model": request.model,
+            "messages": request.messages,
+            "prompt": request.prompt,
+            "run_id": request.run_id,
+            "request_id": request.request_id,
+            "thread_id": request.thread_id,
+            "server_names": request.server_names,
+            "tool_names": request.tool_names,
+            "agent_names": request.agent_names,
+            "agent_descriptions": request.agent_descriptions,
+            "approval_id": request.approval_id,
+            "metadata": request.metadata,
+        },
+        start_to_close_timeout=timedelta(minutes=10),
+    )
+
+
+def _result_from_activity(result: dict[str, Any]) -> TemporalReactRunResult:
+    return TemporalReactRunResult(
+        output=result.get("result"),
+        trace=result.get("trace") or {"events": []},
+    )
+
+
+def _dedupe_activities(activities: list[Callable[..., Any]]) -> list[Callable[..., Any]]:
+    deduped: list[Callable[..., Any]] = []
+    seen: set[str] = set()
+    for activity in activities:
+        name = getattr(activity, "__temporal_activity_definition", None)
+        activity_name = getattr(name, "name", None) or activity.__name__
+        if activity_name in seen:
+            continue
+        seen.add(activity_name)
+        deduped.append(activity)
+    return deduped
