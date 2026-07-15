@@ -32,6 +32,8 @@ class TuningClient:
     timeout: float = 60.0
     user_agent: str = "tuning-agents/0.1.0"
     trace: TraceRecorder = field(default_factory=TraceRecorder)
+    _api_access_token: str | None = field(default=None, init=False, repr=False)
+    _api_access_token_expires_at: float = field(default=0.0, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.api_key = self.api_key or os.getenv("TE_API_KEY")
@@ -88,7 +90,7 @@ class TuningClient:
         started = time.perf_counter()
         try:
             trace_headers = {"X-TE-Request-ID": request_id, "X-TE-Run-ID": self.trace.run_id, **dict(headers or {})}
-            with httpx.Client(timeout=self.timeout, headers=self._headers(trace_headers)) as client:
+            with httpx.Client(timeout=self.timeout, headers=self._headers(trace_headers, path=path, base_url=base_url)) as client:
                 response = client.request(method, url, json=body if json is not None else None)
             payload = self._parse_response(response)
             self.trace.finish(
@@ -128,7 +130,8 @@ class TuningClient:
         started = time.perf_counter()
         try:
             trace_headers = {"X-TE-Request-ID": request_id, "X-TE-Run-ID": self.trace.run_id, **dict(headers or {})}
-            async with httpx.AsyncClient(timeout=self.timeout, headers=self._headers(trace_headers)) as client:
+            headers_with_auth = await self._aheaders(trace_headers, path=path, base_url=base_url)
+            async with httpx.AsyncClient(timeout=self.timeout, headers=headers_with_auth) as client:
                 response = await client.request(method, url, json=body if json is not None else None)
             payload = self._parse_response(response)
             self.trace.finish(
@@ -463,15 +466,88 @@ class TuningClient:
     def new_run_id(self, prefix: str = "run") -> str:
         return f"{prefix}_{uuid.uuid4().hex}"
 
-    def _headers(self, extra: Mapping[str, str] | None = None) -> dict[str, str]:
+    def _headers(
+        self,
+        extra: Mapping[str, str] | None = None,
+        *,
+        path: str | None = None,
+        base_url: str | None = None,
+    ) -> dict[str, str]:
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {self._bearer_token(path=path, base_url=base_url)}",
             "Accept": "application/json",
             "Content-Type": "application/json",
             "User-Agent": self.user_agent,
         }
         headers.update({k: v for k, v in (extra or {}).items() if v})
         return headers
+
+    async def _aheaders(
+        self,
+        extra: Mapping[str, str] | None = None,
+        *,
+        path: str | None = None,
+        base_url: str | None = None,
+    ) -> dict[str, str]:
+        headers = {
+            "Authorization": f"Bearer {await self._abearer_token(path=path, base_url=base_url)}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": self.user_agent,
+        }
+        headers.update({k: v for k, v in (extra or {}).items() if v})
+        return headers
+
+    def _bearer_token(self, *, path: str | None, base_url: str | None) -> str:
+        if self._needs_api_jwt(path=path, base_url=base_url):
+            return self._api_jwt()
+        return str(self.api_key)
+
+    async def _abearer_token(self, *, path: str | None, base_url: str | None) -> str:
+        if self._needs_api_jwt(path=path, base_url=base_url):
+            return await self._aapi_jwt()
+        return str(self.api_key)
+
+    def _needs_api_jwt(self, *, path: str | None, base_url: str | None) -> bool:
+        if not str(self.api_key).startswith("te_"):
+            return False
+        resolved_base_url = (base_url or self.api_url).rstrip("/")
+        return resolved_base_url == self.api_url and str(path or "").startswith("/api/v1/")
+
+    def _api_jwt(self) -> str:
+        now = time.time()
+        if self._api_access_token and self._api_access_token_expires_at - now > 60:
+            return self._api_access_token
+        with httpx.Client(timeout=self.timeout, headers=self._raw_headers()) as client:
+            response = client.post(f"{self.api_url}/api/v1/auth/token")
+        payload = self._parse_response(response)
+        return self._cache_api_jwt(payload)
+
+    async def _aapi_jwt(self) -> str:
+        now = time.time()
+        if self._api_access_token and self._api_access_token_expires_at - now > 60:
+            return self._api_access_token
+        async with httpx.AsyncClient(timeout=self.timeout, headers=self._raw_headers()) as client:
+            response = await client.post(f"{self.api_url}/api/v1/auth/token")
+        payload = self._parse_response(response)
+        return self._cache_api_jwt(payload)
+
+    def _cache_api_jwt(self, payload: Any) -> str:
+        token = payload.get("access_token") if isinstance(payload, dict) else None
+        if not token:
+            raise TuningError("Tuning Engines API error: authentication token exchange did not return an access token")
+        expires_in = float(payload.get("expires_in") or 900)
+        self._api_access_token = str(token)
+        self._api_access_token_expires_at = time.time() + expires_in
+        return self._api_access_token
+
+    def _raw_headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": self.user_agent,
+        }
 
     @staticmethod
     def _parse_response(response: httpx.Response) -> Any:

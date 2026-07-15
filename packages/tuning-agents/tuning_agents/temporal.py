@@ -9,10 +9,22 @@ from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     from .client import TuningClient
 
+try:
+    from temporalio import workflow
+except ImportError:  # pragma: no cover - temporal is an optional extra
+    class _WorkflowShim:
+        def defn(self, cls: type[Any]) -> type[Any]:
+            return cls
+
+        def run(self, fn: Callable[..., Any]) -> Callable[..., Any]:
+            return fn
+
+    workflow = _WorkflowShim()
+
 
 @dataclass
 class AgentRunInput:
-    api_key: str
+    api_key: str | None = None
     inference_url: str = "https://api.tuningengines.com/v1"
     api_url: str = "https://app.tuningengines.com"
     model: str = "auto"
@@ -294,106 +306,99 @@ def create_tuning_engines_plugin(
 TuningEnginesPlugin = create_tuning_engines_plugin
 
 
-def define_temporal_workflow() -> type[Any]:
-    """Return a Temporal workflow class without importing Temporal at module load.
+@workflow.defn
+class TuningAgentWorkflow:
+    @workflow.run
+    async def run(self, request: AgentRunInput) -> AgentRunResult:
+        messages = list(request.messages)
+        trace_events: list[dict[str, Any]] = []
 
-    Temporal workflow modules are replayed under deterministic constraints. This
-    factory keeps optional dependencies isolated for users who only need
-    LangGraph.
-    """
-
-    try:
-        from temporalio import workflow
-    except ImportError as exc:  # pragma: no cover - depends on optional extra
-        raise ImportError("Install tuning-agents[temporal] to use the Temporal adapter") from exc
-
-    @workflow.defn
-    class TuningAgentWorkflow:
-        @workflow.run
-        async def run(self, request: AgentRunInput) -> AgentRunResult:
-            messages = list(request.messages)
-            trace_events: list[dict[str, Any]] = []
-
-            for step in range(request.max_steps):
-                llm = await workflow.execute_activity(
-                    chat_completion_activity,
-                    {
-                        "api_key": request.api_key,
-                        "api_url": request.api_url,
-                        "inference_url": request.inference_url,
-                        "model": request.model,
-                        "messages": messages,
-                        "tools": request.tools,
-                        "run_id": request.run_id,
-                        "request_id": request.request_id,
-                        "approval_id": request.approval_id,
-                        "metadata": request.metadata,
-                    },
-                    start_to_close_timeout=timedelta(minutes=5),
-                )
-                trace_events.extend(_events_from_activity(llm))
-                choice = (llm.get("choices") or [{}])[0]
-                message = choice.get("message") or {}
-                messages.append(message)
-
-                tool_calls = message.get("tool_calls") or []
-                if not tool_calls:
-                    return AgentRunResult(output=message, trace={"events": trace_events})
-
-                for tool_call in tool_calls:
-                    function = tool_call.get("function") or {}
-                    tool_call_name = function.get("name") or ""
-                    arguments = function.get("arguments") or {}
-                    if isinstance(arguments, str):
-                        arguments = json.loads(arguments or "{}")
-                    if tool_call_name.startswith("agent__"):
-                        agent_name = tool_call_name.removeprefix("agent__")
-                        tool_result = await workflow.execute_activity(
-                            agent_message_activity,
-                            {
-                                "api_key": request.api_key,
-                                "api_url": request.api_url,
-                                "inference_url": request.inference_url,
-                                "agent_name": agent_name,
-                                "message": arguments.get("message") or arguments.get("input") or "",
-                                "context": arguments.get("context") or {},
-                                "run_id": request.run_id,
-                                "request_id": request.request_id,
-                                "approval_id": request.approval_id,
-                            },
-                            start_to_close_timeout=timedelta(minutes=2),
-                        )
-                    else:
-                        server_name, tool_name = _split_tool_name(tool_call_name)
-                        tool_result = await workflow.execute_activity(
-                            mcp_tool_activity,
-                            {
-                                "api_key": request.api_key,
-                                "api_url": request.api_url,
-                                "inference_url": request.inference_url,
-                                "server_name": server_name,
-                                "tool_name": tool_name,
-                                "arguments": arguments,
-                                "run_id": request.run_id,
-                                "request_id": request.request_id,
-                                "approval_id": request.approval_id,
-                            },
-                            start_to_close_timeout=timedelta(minutes=5),
-                        )
-                    trace_events.extend(_events_from_activity(tool_result))
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tool_call.get("id"),
-                            "content": str(tool_result.get("result")),
-                        }
-                    )
-
-            return AgentRunResult(
-                output={"role": "assistant", "content": "Max steps reached."},
-                trace={"events": trace_events},
+        for step in range(request.max_steps):
+            llm = await workflow.execute_activity(
+                chat_completion_activity,
+                {
+                    "api_key": request.api_key,
+                    "api_url": request.api_url,
+                    "inference_url": request.inference_url,
+                    "model": request.model,
+                    "messages": messages,
+                    "tools": request.tools,
+                    "run_id": request.run_id,
+                    "request_id": request.request_id,
+                    "approval_id": request.approval_id,
+                    "metadata": request.metadata,
+                },
+                start_to_close_timeout=timedelta(minutes=5),
             )
+            trace_events.extend(_events_from_activity(llm))
+            choice = (llm.get("choices") or [{}])[0]
+            message = choice.get("message") or {}
+            messages.append(message)
 
+            tool_calls = message.get("tool_calls") or []
+            if not tool_calls:
+                return AgentRunResult(output=message, trace={"events": trace_events})
+
+            for tool_call in tool_calls:
+                function = tool_call.get("function") or {}
+                tool_call_name = function.get("name") or ""
+                arguments = function.get("arguments") or {}
+                if isinstance(arguments, str):
+                    arguments = json.loads(arguments or "{}")
+                if tool_call_name.startswith("agent__"):
+                    agent_name = tool_call_name.removeprefix("agent__")
+                    tool_result = await workflow.execute_activity(
+                        agent_message_activity,
+                        {
+                            "api_key": request.api_key,
+                            "api_url": request.api_url,
+                            "inference_url": request.inference_url,
+                            "agent_name": agent_name,
+                            "message": arguments.get("message") or arguments.get("input") or "",
+                            "context": arguments.get("context") or {},
+                            "run_id": request.run_id,
+                            "request_id": request.request_id,
+                            "approval_id": request.approval_id,
+                        },
+                        start_to_close_timeout=timedelta(minutes=2),
+                    )
+                else:
+                    server_name, tool_name = _split_tool_name(tool_call_name)
+                    tool_result = await workflow.execute_activity(
+                        mcp_tool_activity,
+                        {
+                            "api_key": request.api_key,
+                            "api_url": request.api_url,
+                            "inference_url": request.inference_url,
+                            "server_name": server_name,
+                            "tool_name": tool_name,
+                            "arguments": arguments,
+                            "run_id": request.run_id,
+                            "request_id": request.request_id,
+                            "approval_id": request.approval_id,
+                        },
+                        start_to_close_timeout=timedelta(minutes=5),
+                    )
+                trace_events.extend(_events_from_activity(tool_result))
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.get("id"),
+                        "content": str(tool_result.get("result")),
+                    }
+                )
+
+        return AgentRunResult(
+            output={"role": "assistant", "content": "Max steps reached."},
+            trace={"events": trace_events},
+        )
+
+
+def define_temporal_workflow() -> type[Any]:
+    """Return the importable module-scope starter workflow class.
+
+    Kept as a compatibility helper for examples and older imports.
+    """
     return TuningAgentWorkflow
 
 

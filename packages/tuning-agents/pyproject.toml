@@ -23,7 +23,7 @@ langgraph = [
   "langchain-core>=0.2.30",
 ]
 temporal = [
-  "temporalio>=1.7",
+  "temporalio>=1.30.0",
 ]
 dev = [
   "pytest>=8.0",
