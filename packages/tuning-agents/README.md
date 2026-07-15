@@ -25,9 +25,12 @@ and OpenAI SDK integrations, see
 ## Install
 
 ```bash
-pip install tuning-agents[langgraph]
-pip install tuning-agents[temporal]
+pip install "tuning-engines[langgraph]"
+pip install "tuning-engines[temporal]"
 ```
+
+The published package name is `tuning-engines`; it installs the
+`tuning_agents` Python module.
 
 From this repository:
 

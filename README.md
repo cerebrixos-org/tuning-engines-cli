@@ -243,12 +243,14 @@ Python SDK when you want your own app to run durable agent workflows while
 Tuning Engines remains the governed control plane for models, agents, skills,
 MCP tools, RBAC, AGT policy, audit, usage, and token economics.
 
-Install directly from this repo:
+Install the published Python SDK:
 
 ```bash
-pip install "tuning-agents[langgraph] @ git+https://github.com/cerebrixos-org/tuning-engines-cli.git#subdirectory=packages/tuning-agents"
-pip install "tuning-agents[temporal] @ git+https://github.com/cerebrixos-org/tuning-engines-cli.git#subdirectory=packages/tuning-agents"
+pip install "tuning-engines[langgraph]"
+pip install "tuning-engines[temporal]"
 ```
+
+The package installs the `tuning_agents` Python module.
 
 LangGraph example:
 

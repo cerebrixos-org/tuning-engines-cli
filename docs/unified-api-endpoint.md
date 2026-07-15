@@ -133,7 +133,7 @@ For governed MCP calls, tenant-agent dispatch, and trace upload from Temporal,
 use the packaged runtime adapter:
 
 ```bash
-pip install "tuning-agents[temporal] @ git+https://github.com/cerebrixos-org/tuning-engines-cli.git#subdirectory=packages/tuning-agents"
+pip install "tuning-engines[temporal]"
 ```
 
 ## LangGraph
@@ -164,7 +164,7 @@ For governed MCP calls, tenant-agent dispatch, and trace upload from LangGraph,
 use the packaged runtime adapter:
 
 ```bash
-pip install "tuning-agents[langgraph] @ git+https://github.com/cerebrixos-org/tuning-engines-cli.git#subdirectory=packages/tuning-agents"
+pip install "tuning-engines[langgraph]"
 ```
 
 ## Other OpenAI-Compatible Clients
