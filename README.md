@@ -154,6 +154,7 @@ te guard claude-code install --mode observe --project .
 te guard claude-code doctor
 te guard claude-code doctor --probe
 te guard codex install
+te guard codex doctor
 ```
 
 Claude Code writes project-local hooks into `.claude/settings.local.json`. On
@@ -163,9 +164,14 @@ then restart Claude Code from the same project root and review `claude /hooks`.
 synthetic hook events through the installed commands and checks that the trace is
 visible to Tuning Engines. Hook invocations also write a local redacted status
 log at `.claude/tuning-engines-hook-status.jsonl`.
-Codex project hooks require review and trust from `/hooks`. Tuning Engines sends
-pseudonymous session and transcript references by default, not transcript
-contents or local absolute paths.
+Codex project hooks require review and trust from `/hooks`. The installer pins
+hooks to the exact CLI executable that created them; `te guard codex doctor`
+reports that path, CLI version, native-event contract, required lifecycle
+hooks, and any conflicting `te` command found on `PATH`. Each Codex or Claude
+Code user prompt starts a new trace while retaining one stable Work Session for
+the native conversation. Tuning Engines sends pseudonymous session and
+transcript references by default, not transcript contents or local absolute
+paths.
 
 ### Claude Code Plugin
 

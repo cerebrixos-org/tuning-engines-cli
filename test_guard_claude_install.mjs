@@ -164,7 +164,10 @@ for (const event of ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostTool
   assert.ok(Array.isArray(settings.hooks[event]), `${event} hook should be installed`);
   assert.ok(
     settings.hooks[event].some((entry) =>
-      Array.isArray(entry.hooks) && entry.hooks.some((hook) => String(hook.command).includes(`te guard claude-code hook --event ${event}`))
+      Array.isArray(entry.hooks) && entry.hooks.some((hook) => {
+        const command = String(hook.command).replace(/["']/g, "").replace(/\s+/g, " ");
+        return command.includes(`guard claude-code hook --event ${event}`);
+      })
     ),
     `${event} hook should call te guard`
   );
@@ -172,7 +175,7 @@ for (const event of ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostTool
 for (const event of ["SessionStart", "PreToolUse", "PostToolUse"]) {
   for (const entry of settings.hooks[event]) {
     for (const hook of entry.hooks || []) {
-      if (String(hook.command).includes("guard claude-code hook")) {
+      if (String(hook.command).replace(/["']/g, "").includes("guard claude-code hook")) {
         hook.command = `"${process.execPath}" "${cli}" guard claude-code hook --event ${event} --mode observe`;
       }
     }

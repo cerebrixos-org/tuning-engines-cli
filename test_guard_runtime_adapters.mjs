@@ -160,6 +160,11 @@ try {
   assert.equal(api.requests.at(-1).run_id, firstPromptRequest.run_id);
   assert.equal(firstTurnTool.metadata.tool_call_id, "tool-native-read-1");
   assert.equal(firstTurnTool.metadata.human_summary, "Read README.md");
+  assert.equal(firstTurnTool.metadata.native_event_contract_version, "te-native-event-v2");
+  assert.match(firstTurnTool.metadata.cli_version, /^0\./);
+  assert.match(firstTurnTool.metadata.resolved_hook_command_path, /dist[\\/]cli\.js$/);
+  assert.equal(firstTurnTool.metadata.tool_input, undefined);
+  assert.equal(firstTurnTool.metadata.tool_response, undefined);
   assert.doesNotMatch(firstTurnTool.metadata.human_summary, /must not appear/);
 
   await runHook(["guard", "codex", "hook", "--event", "SubagentStart"], {
@@ -248,6 +253,8 @@ try {
   assert.equal(failedBash.metadata.ok, false);
   assert.equal(failedBash.metadata.tool_call_id, proposed.metadata.tool_call_id, "completion must reuse proposal tool_call_id");
   assert.equal(failedBash.parent_id, proposed.id, "completion should parent to the proposal event");
+  assert.equal(failedBash.metadata.tool_input, undefined);
+  assert.equal(failedBash.metadata.tool_response, undefined);
   assert.doesNotMatch(JSON.stringify(failedBash), /sk-te-secret-would-leak/);
 
   await runHook(["guard", "codex", "hook", "--event", "PostToolUse"], {
@@ -280,11 +287,61 @@ try {
   for (const event of ["PermissionRequest", "SessionEnd", "PreCompact", "PostCompact"]) {
     assert.ok(Array.isArray(codexHooks[event]), `${event} hook should be installed for Codex`);
   }
+  const codexHookCommand = codexHooks.UserPromptSubmit[0].hooks[0].command;
+  assert.match(codexHookCommand, new RegExp(process.execPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(codexHookCommand, /dist[\\/]cli\.js/);
+  assert.doesNotMatch(codexHookCommand, /^te\s/);
+  assert.match(
+    run(["guard", "codex", "doctor", "--project", codexProject], { apiUrl: api.apiUrl }),
+    /\[OK\] Pinned hook entrypoint/
+  );
 
   const claudeProject = path.join(tmp, "claude-project");
   run(["guard", "claude-code", "install", "--project", claudeProject, "--mode", "observe"], { apiUrl: api.apiUrl });
   const claudeHooks = JSON.parse(fs.readFileSync(path.join(claudeProject, ".claude", "settings.local.json"), "utf8")).hooks;
   assert.ok(Array.isArray(claudeHooks.PermissionRequest), "Claude PermissionRequest hook should be installed");
+  assert.match(claudeHooks.UserPromptSubmit[0].hooks[0].command, /dist[\\/]cli\.js/);
+  assert.match(
+    run(["guard", "claude-code", "doctor", "--project", claudeProject], { apiUrl: api.apiUrl }),
+    /\[OK\] Required TE hooks/
+  );
+
+  await runHook(["guard", "claude-code", "hook", "--event", "SessionStart", "--mode", "observe"], {
+    session_id: "claude-native-turns",
+    cwd: tmp,
+  }, { apiUrl: api.apiUrl });
+  await runHook(["guard", "claude-code", "hook", "--event", "UserPromptSubmit", "--mode", "observe"], {
+    session_id: "claude-native-turns",
+    cwd: tmp,
+    prompt: "Inspect the README",
+  }, { apiUrl: api.apiUrl });
+  const claudeFirstPrompt = api.requests.at(-1);
+  assert.match(claudeFirstPrompt.run_id, /^run_claude_code_/);
+  await runHook(["guard", "claude-code", "hook", "--event", "PreToolUse", "--mode", "observe"], {
+    session_id: "claude-native-turns",
+    cwd: tmp,
+    tool_name: "Read",
+    tool_use_id: "claude-read-1",
+    tool_input: { path: "README.md" },
+  }, { apiUrl: api.apiUrl });
+  assert.equal(api.requests.at(-1).run_id, claudeFirstPrompt.run_id);
+  await runHook(["guard", "claude-code", "hook", "--event", "UserPromptSubmit", "--mode", "observe"], {
+    session_id: "claude-native-turns",
+    cwd: tmp,
+    prompt: "Inspect package metadata",
+  }, { apiUrl: api.apiUrl });
+  const claudeSecondPrompt = api.requests.at(-1);
+  assert.notEqual(claudeSecondPrompt.run_id, claudeFirstPrompt.run_id);
+  assert.equal(claudeSecondPrompt.metadata.session_id, claudeFirstPrompt.metadata.session_id);
+  await runHook(["guard", "claude-code", "hook", "--event", "SessionEnd", "--mode", "observe"], {
+    session_id: "claude-native-turns",
+    cwd: tmp,
+    last_assistant_message: "Package metadata review complete.",
+  }, { apiUrl: api.apiUrl });
+  const claudeSessionEnd = api.requests.at(-1);
+  assert.equal(claudeSessionEnd.run_id, claudeSecondPrompt.run_id);
+  assert.equal(claudeSessionEnd.status, "succeeded");
+  assert.equal(lastEvent(api).metadata.final_response, "Package metadata review complete.");
 
   await runHook(["guard", "claude-code", "hook", "--event", "PermissionDenied", "--mode", "observe"], {
     session_id: "claude-denied",
