@@ -52,6 +52,7 @@ const HOOK_EVENTS = [
     "PostToolUse",
     "PostToolUseFailure",
     "PostToolBatch",
+    "PermissionRequest",
     "PermissionDenied",
     "SubagentStart",
     "Stop",
@@ -61,14 +62,16 @@ const HOOK_EVENTS = [
     "TaskCompleted",
 ];
 const CLINE_HOOK_EVENTS = ["TaskStart", "TaskResume", "TaskCancel", "TaskComplete", "PreToolUse", "PostToolUse", "UserPromptSubmit", "PreCompact"];
-const CODEX_HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SubagentStart", "SubagentStop"];
+const CODEX_HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "SessionEnd", "PreCompact", "PostCompact", "Stop", "SubagentStart", "SubagentStop"];
 const RICH_WRAPPER_RUNTIMES = new Set(["codex", "opencode", "aider", "continue", "zed", "custom"]);
+const TOOL_LIFECYCLE_EVENTS = new Set(["PreToolUse", "PostToolUse", "PostToolUseFailure", "tool.execute.before", "tool.execute.after"]);
 const SECRET_PATTERNS = [
     /\bsk-te-[A-Za-z0-9_\-]{16,}\b/g,
     /\bsk-[A-Za-z0-9_\-]{8,}\b/g,
     /\bte_[A-Za-z0-9_\-]{16,}\b/g,
     /\bAKIA[0-9A-Z]{16}\b/g,
     /\b(?:api[_-]?key|secret|token|password)\s*[:=]\s*["']?[^"'\s,}]+/gi,
+    /\bgAAAA[A-Za-z0-9_-]{16,}\b/g,
 ];
 function sha(value) {
     return crypto.createHash("sha256").update(value).digest("hex");
@@ -118,7 +121,7 @@ function installHook(settings, event, mode, failOpen) {
     const entry = {
         hooks: [{ type: "command", command: hookCommand(event, mode, failOpen) }],
     };
-    if (event === "PreToolUse" || event === "PostToolUse" || event === "PostToolUseFailure" || event === "PermissionDenied")
+    if (event === "PreToolUse" || event === "PostToolUse" || event === "PostToolUseFailure" || event === "PermissionRequest" || event === "PermissionDenied")
         entry.matcher = "*";
     settings.hooks[event].push(entry);
 }
@@ -144,7 +147,7 @@ function installCodexHook(settings, event) {
     const entry = {
         hooks: [{ type: "command", command: codexHookCommand(event), statusMessage: "Recording Tuning Engines telemetry" }],
     };
-    if (event === "PreToolUse" || event === "PostToolUse")
+    if (event === "PreToolUse" || event === "PostToolUse" || event === "PostToolUseFailure" || event === "PermissionRequest")
         entry.matcher = "*";
     settings.hooks[event].push(entry);
 }
@@ -210,6 +213,15 @@ function firstPresent(...values) {
 function boundedId(value) {
     return value ? value.slice(0, 200) : undefined;
 }
+function compactString(value, limit = 240) {
+    if (value === undefined || value === null)
+        return undefined;
+    if (typeof value === "object" && Object.keys(value).length === 0)
+        return undefined;
+    const text = typeof value === "string" ? value : JSON.stringify(compact(value));
+    const normalized = redact(text).replace(/\s+/g, " ").trim();
+    return normalized && normalized !== "{}" && normalized !== "[]" ? normalized.slice(0, limit) : undefined;
+}
 function sessionId(input) {
     return String(firstPresent(process.env.TE_NATIVE_SESSION_ID, process.env.TE_NATIVE_THREAD_ID, input.session_id, input.conversation_id, input.taskId, input.task_id, input.transcript_path, process.env.CLAUDE_PROJECT_DIR, process.cwd()));
 }
@@ -229,34 +241,54 @@ function runtimeSlug(runtime) {
     return runtime.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 function runIdFor(input, runtime = "claude_code") {
-    const explicit = boundedId(firstPresent(input.run_id, input.te_run_id, process.env.TE_RUN_ID));
+    const explicit = boundedId(firstPresent(input.run_id, input.te_run_id));
     if (explicit)
         return explicit;
+    const turn = firstPresent(input.turn_id, input.turnId);
+    if (runtime === "codex" && turn)
+        return `run_codex_${sha(turn).slice(0, 24)}`;
+    const environmentId = boundedId(process.env.TE_RUN_ID);
+    if (environmentId)
+        return environmentId;
     return `run_${runtimeSlug(runtime)}_${sha(sessionId(input)).slice(0, 24)}`;
 }
 function requestIdFor(input, runtime = "claude_code") {
-    const explicit = boundedId(firstPresent(input.request_id, input.te_request_id, process.env.TE_REQUEST_ID));
+    const explicit = boundedId(firstPresent(input.request_id, input.te_request_id));
     if (explicit)
         return explicit;
+    const turn = firstPresent(input.turn_id, input.turnId);
+    if (runtime === "codex" && turn)
+        return `req_codex_${sha(turn).slice(0, 24)}`;
+    const environmentId = boundedId(process.env.TE_REQUEST_ID);
+    if (environmentId)
+        return environmentId;
     return `req_${runtimeSlug(runtime)}_${sha(sessionId(input)).slice(0, 24)}`;
 }
 function toolName(input) {
     return input.tool_name || input.name || input.tool?.name || input.preToolUse?.toolName || input.postToolUse?.toolName;
 }
 function toolInput(input) {
-    return input.tool_input || input.input || input.arguments || input.tool?.input || {};
+    return input.tool_input || input.toolInput || input.input || input.arguments || input.args || input.tool?.input || input.tool?.arguments || {};
 }
 function toolResponse(input) {
-    return input.tool_response || input.output || input.response || input.result || {};
+    return input.tool_response || input.toolResponse || input.output || input.response || input.result || {};
 }
 function eventType(event) {
     if (event === "UserPromptSubmit")
         return "agent.message";
+    if (event === "PermissionRequest" || event === "permission.asked")
+        return "approval.requested";
+    if (event === "PermissionDenied" || event === "approval.denied")
+        return "approval.denied";
+    if (event === "approval.approved")
+        return "approval.approved";
+    if (event === "permission.replied")
+        return "approval.requested";
     if (event === "SessionEnd" || event === "Stop" || event === "StopFailure" || event === "SubagentStop" || event === "AfterTask" || event === "TaskComplete" || event === "TaskCompleted" || event === "TaskCancel")
         return "action.finalized";
-    if (event === "PreToolUse" || event === "PostToolUse" || event === "PostToolUseFailure")
+    if (event === "PreToolUse" || event === "PostToolUse" || event === "PostToolUseFailure" || event === "tool.execute.before" || event === "tool.execute.after")
         return "agent.tool_call";
-    if (event === "SessionStart" || event === "TaskStart" || event === "TaskCreated" || event === "TaskResume" || event === "PostToolBatch" || event === "PermissionDenied" || event === "PreCompact" || event === "UserPromptExpansion" || event === "AfterAgent")
+    if (event === "SessionStart" || event === "TaskStart" || event === "TaskCreated" || event === "TaskResume" || event === "PostToolBatch" || event === "PreCompact" || event === "PostCompact" || event === "UserPromptExpansion" || event === "AfterAgent" || event === "session.created" || event === "session.idle" || event === "session.error")
         return "workflow.step";
     if (event === "SubagentStart")
         return "agent.message";
@@ -265,24 +297,194 @@ function eventType(event) {
 function eventStatus(event, decision) {
     if (decision && decision.allowed === false)
         return "blocked";
-    if (event === "PreToolUse")
+    if (event === "PreToolUse" || event === "PermissionRequest" || event === "permission.asked" || event === "tool.execute.before")
         return "proposed";
-    if (event === "PostToolUseFailure" || event === "StopFailure" || event === "TaskCancel")
+    if (event === "PermissionDenied" || event === "approval.denied")
+        return "blocked";
+    if (event === "approval.approved")
+        return "succeeded";
+    if (event === "PostToolUseFailure" || event === "StopFailure" || event === "TaskCancel" || event === "session.error")
         return "failed";
     if (event === "PostToolUse")
+        return "succeeded";
+    if (event === "tool.execute.after")
         return "succeeded";
     if (event === "SessionEnd" || event === "Stop" || event === "SubagentStop" || event === "AfterTask" || event === "TaskComplete" || event === "TaskCompleted" || event === "PostToolBatch")
         return "succeeded";
     return "started";
 }
-function toolExecutionPhase(event) {
-    if (event === "PreToolUse")
+function statusForEvent(input, event, decision) {
+    if (decision && decision.allowed === false)
+        return "blocked";
+    if (event === "PostToolUse" || event === "tool.execute.after")
+        return hookFailureData(input).failed ? "failed" : "succeeded";
+    if (event === "permission.replied")
+        return permissionGranted(input) ? "succeeded" : "blocked";
+    return eventStatus(event, decision);
+}
+function toolExecutionPhase(event, input = {}) {
+    if (event === "PreToolUse" || event === "tool.execute.before")
         return "proposed";
-    if (event === "PostToolUse")
-        return "executed";
+    if (event === "PostToolUse" || event === "tool.execute.after")
+        return hookFailureData(input).failed ? "failed" : "executed";
     if (event === "PostToolUseFailure")
         return "failed";
+    if (event === "PermissionRequest" || event === "permission.asked")
+        return "proposed";
+    if (event === "PermissionDenied" || event === "approval.denied")
+        return "blocked";
+    if (event === "approval.approved")
+        return "approved";
     return undefined;
+}
+function permissionGranted(input) {
+    const value = firstPresent(input.granted, input.approved, input.allowed, input.response?.granted, input.response?.approved, input.response?.allowed);
+    const normalized = String(value).toLowerCase();
+    return normalized === "true" || normalized === "approved" || normalized === "allow";
+}
+function stableTurnId(input, runtime) {
+    const explicit = firstPresent(input.turn_id, input.turnId, input.message_id, input.messageId, input.prompt_id, input.promptId);
+    if (explicit)
+        return boundedId(explicit);
+    return `turn_${sha([runtime, sessionId(input), promptSummary(input) || input.timestamp || ""].join(":")).slice(0, 24)}`;
+}
+function toolCallId(input, runtime) {
+    const explicit = firstPresent(input.tool_call_id, input.tool_use_id, input.toolUseId, input.call_id, input.callId, input.id, input.tool?.call_id, input.tool?.id, input.tool_call?.id);
+    if (explicit)
+        return boundedId(explicit);
+    const tool = toolName(input);
+    if (!tool)
+        return undefined;
+    return `tool_${sha([runtime, sessionId(input), stableTurnId(input, runtime), tool, compactString(toolInput(input), 800) || ""].join(":")).slice(0, 24)}`;
+}
+function exitCode(input) {
+    const value = firstPresent(input.exit_code, input.exitCode, input.code, input.result?.exit_code, input.result?.exitCode, input.tool_response?.exit_code, input.toolResponse?.exitCode, input.output?.exit_code);
+    if (value === undefined)
+        return undefined;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+}
+function hookFailureData(input) {
+    const response = toolResponse(input);
+    const code = exitCode(input);
+    const rawError = firstPresent(input.error, input.failure, input.exception, input.error_message, input.errorMessage, input.result?.error, input.result?.failure, input.output?.error, input.response?.error, input.tool_response?.error, input.toolResponse?.error);
+    const failed = input.success === false ||
+        input.ok === false ||
+        input.result?.success === false ||
+        input.result?.ok === false ||
+        response?.success === false ||
+        response?.ok === false ||
+        Boolean(rawError) ||
+        (code !== undefined && code !== 0);
+    return {
+        failed,
+        error: rawError ? redactError(rawError) : undefined,
+        exit_code: code,
+    };
+}
+function previewForInput(input) {
+    return compactString(firstPresent(input.input_preview, input.inputPreview, input.arguments_preview, input.args_preview, safeToolInputPreview(input)));
+}
+function previewForResponse(input) {
+    if (toolName(input)) {
+        return compactString(firstPresent(input.result_summary, toolResponse(input)?.summary), 240);
+    }
+    return compactString(firstPresent(input.response_preview, input.responsePreview, input.output_preview, input.outputPreview, input.last_assistant_message, input.result_summary), 1200);
+}
+function humanSummary(input, event, runtime) {
+    const explicit = firstPresent(input.human_summary, input.te_display_summary, input.summary);
+    if (explicit)
+        return compactString(explicit);
+    const tool = toolName(input);
+    const failure = hookFailureData(input);
+    if (event === "PermissionRequest")
+        return tool ? `Approval requested for ${tool}.` : "Approval requested.";
+    if (event === "PermissionDenied")
+        return tool ? `Approval denied for ${tool}.` : "Approval denied.";
+    if (event === "permission.asked")
+        return tool ? `OpenCode asked permission for ${tool}.` : "OpenCode asked permission.";
+    if (event === "permission.replied")
+        return permissionGranted(input) ? "OpenCode permission approved." : "OpenCode permission denied.";
+    if (event === "SubagentStart")
+        return `Started subagent: ${subagentTaskName(input) || input.agent_type || "delegated task"}`;
+    if (event === "SubagentStop")
+        return `Subagent finished: ${subagentResultSummary(input) || "task completed"}`;
+    if (event === "Stop")
+        return compactString(input.last_assistant_message || input.response_preview, 240) || "Agent response completed.";
+    if (event === "SessionEnd")
+        return "Codex session completed.";
+    if (event === "PreToolUse" || event === "tool.execute.before")
+        return tool ? safeToolSummary(input, false) : undefined;
+    if (event === "PostToolUse" || event === "PostToolUseFailure" || event === "tool.execute.after") {
+        if (!tool)
+            return failure.failed ? "Tool failed." : "Tool completed.";
+        if (failure.failed)
+            return `${friendlyToolLabel(tool)} failed${failure.exit_code !== undefined ? ` with exit ${failure.exit_code}` : ""}.`;
+        return safeToolSummary(input, true);
+    }
+    return promptSummary(input);
+}
+function safeRelativePath(value, cwd) {
+    const raw = String(value || "").trim();
+    if (!raw || raw.includes("\0") || raw.includes("\n") || raw.startsWith("gAAAA"))
+        return undefined;
+    const redacted = redact(raw);
+    if (redacted.includes("[FILTERED]"))
+        return undefined;
+    const normalized = redacted.replace(/\\/g, "/");
+    if (!path.isAbsolute(raw))
+        return normalized.replace(/^\.\//, "").slice(0, 180);
+    const base = cwd ? path.resolve(String(cwd)) : undefined;
+    const relative = base ? path.relative(base, raw).replace(/\\/g, "/") : "";
+    if (relative && !relative.startsWith("../") && relative !== "..")
+        return relative.slice(0, 180);
+    return path.basename(raw).slice(0, 180);
+}
+function toolPath(input) {
+    const values = toolInput(input) || {};
+    return safeRelativePath(firstPresent(values.file_path, values.filePath, values.path, values.filename, values.target_file, values.targetFile), input.cwd);
+}
+function friendlyToolLabel(value) {
+    if (/^(bash|shell|exec_command|write_stdin)$/i.test(value))
+        return "Shell command";
+    if (/^(apply_patch|edit|write)$/i.test(value))
+        return "File update";
+    if (/^(read|read_file|view)$/i.test(value))
+        return "File read";
+    return value.replace(/^mcp__/, "").replace(/__/g, " · ").replace(/_/g, " ");
+}
+function safeToolInputPreview(input) {
+    const values = toolInput(input) || {};
+    return compactString(firstPresent(values.summary, values.description, values.task_name, values.taskName, values.name, toolPath(input)));
+}
+function safeToolSummary(input, completed) {
+    const name = String(toolName(input) || "Tool");
+    const file = toolPath(input);
+    if (/^(read|read_file|view)$/i.test(name) && file)
+        return `Read ${file}`;
+    if (/^(write|create|write_file)$/i.test(name) && file)
+        return `${completed ? "Created" : "Create"} ${file}`;
+    if (/^(edit|apply_patch|update_file)$/i.test(name) && file)
+        return `${completed ? "Updated" : "Update"} ${file}`;
+    if (/^(spawn_agent|agent|task)$/i.test(name)) {
+        return completed
+            ? `Subagent finished: ${subagentResultSummary(input) || subagentTaskName(input) || "task completed"}`
+            : `Started subagent: ${subagentTaskName(input) || "delegated task"}`;
+    }
+    const safeInput = safeToolInputPreview(input);
+    const safeResponse = previewForResponse(input);
+    if (completed && safeResponse)
+        return `${friendlyToolLabel(name)} completed: ${safeResponse}`;
+    if (safeInput)
+        return `${completed ? friendlyToolLabel(name) : `Run ${friendlyToolLabel(name)}`}: ${safeInput}`;
+    return completed ? `${friendlyToolLabel(name)} completed.` : `Run ${friendlyToolLabel(name)}.`;
+}
+function subagentTaskName(input) {
+    const values = toolInput(input) || {};
+    return compactString(firstPresent(input.task_name, input.taskName, input.agent_name, input.agent_type, values.task_name, values.taskName, values.name, values.description), 120);
+}
+function subagentResultSummary(input) {
+    return compactString(firstPresent(input.result_summary, input.last_assistant_message, input.response_preview, toolResponse(input)?.summary), 180);
 }
 function promptSummary(input) {
     const value = input.prompt || input.user_prompt || input.expansion || input.command;
@@ -340,6 +542,9 @@ function nativeGoalMetadata(input, event, runtime) {
 }
 function nativeTaskSeed(input, event, runtime) {
     const explicit = eventInputId(input);
+    const callId = toolCallId(input, runtime);
+    if (TOOL_LIFECYCLE_EVENTS.has(event) && callId)
+        return `${runtime}:tool:${callId}`;
     const tool = toolName(input);
     if (explicit)
         return `${runtime}:task:${explicit}`;
@@ -357,15 +562,15 @@ function nativeParentTaskSeed(input, event, runtime) {
     const explicitParent = input.parent_task_id || input.parentTaskId || input.parent_tool_use_id || input.parent_tool_call_id || input.parent_event_id || input.parent_id;
     if (explicitParent)
         return `${runtime}:task:${explicitParent}`;
-    if (event === "SessionStart")
+    if (event === "SessionStart" || event === "UserPromptSubmit")
         return undefined;
-    if (event === "PostToolUse" || event === "PostToolUseFailure")
+    if (event === "PostToolUse" || event === "PostToolUseFailure" || event === "tool.execute.after")
         return nativeTaskSeed(input, "PreToolUse", runtime);
     if (event === "SubagentStop")
         return nativeTaskSeed(input, "SubagentStart", runtime);
     if (event === "TaskComplete" || event === "TaskCompleted" || event === "TaskCancel")
         return nativeTaskSeed(input, "TaskStart", runtime);
-    return `${runtime}:session:${sessionId(input)}:start`;
+    return nativeTaskSeed(input, "UserPromptSubmit", runtime);
 }
 function nativeEventId(input, event, runtime) {
     return `evt_${sha([runtime, nativeTaskSeed(input, event, runtime), event].join(":")).slice(0, 24)}`;
@@ -374,15 +579,17 @@ function nativeParentEventId(input, event, runtime) {
     if (input.parent_event_id || input.parent_id || input.parent_client_event_id) {
         return String(input.parent_event_id || input.parent_id || input.parent_client_event_id);
     }
-    if (event === "SessionStart")
+    if (event === "SessionStart" || event === "UserPromptSubmit")
         return undefined;
     if (event === "PostToolUse" || event === "PostToolUseFailure")
         return nativeEventId(input, "PreToolUse", runtime);
+    if (event === "tool.execute.after")
+        return nativeEventId(input, "tool.execute.before", runtime);
     if (event === "SubagentStop")
         return nativeEventId(input, "SubagentStart", runtime);
     if (event === "TaskComplete" || event === "TaskCompleted" || event === "TaskCancel")
         return nativeEventId(input, "TaskStart", runtime);
-    return nativeEventId(input, "SessionStart", runtime);
+    return nativeEventId(input, "UserPromptSubmit", runtime);
 }
 function nativeTaskId(input, event, runtime) {
     return `task_${sha(nativeTaskSeed(input, event, runtime)).slice(0, 24)}`;
@@ -392,6 +599,12 @@ function nativeParentTaskId(input, event, runtime) {
     return seed ? `task_${sha(seed).slice(0, 24)}` : undefined;
 }
 function nativeEventMetadata(input, event, runtime) {
+    const callId = toolCallId(input, runtime);
+    const turnId = stableTurnId(input, runtime);
+    const failure = hookFailureData(input);
+    const inputPreview = previewForInput(input);
+    const responsePreview = previewForResponse(input);
+    const summary = humanSummary(input, event, runtime);
     return {
         native_event_contract_version: NATIVE_EVENT_CONTRACT_VERSION,
         native_correlation_source: runtime,
@@ -406,14 +619,85 @@ function nativeEventMetadata(input, event, runtime) {
         thread_id: safeThreadId(input),
         task_id: nativeTaskId(input, event, runtime),
         parent_task_id: nativeParentTaskId(input, event, runtime),
+        turn_id: turnId,
+        tool_call_id: callId,
+        agent_id: input.agent_id,
+        parent_agent_id: input.parent_agent_id,
+        subagent_type: input.agent_type,
+        subagent_task: subagentTaskName(input),
+        subagent_result: subagentResultSummary(input),
         native_lifecycle_event: event,
         native_event_type: eventType(event),
-        summary_source: promptSummary(input) ? "native_hook_redacted" : undefined,
-        te_tool_capture_version: toolExecutionPhase(event) ? "v1" : undefined,
-        te_tool_activity_source: toolExecutionPhase(event) ? "native_hook" : undefined,
-        te_tool_execution_phase: toolExecutionPhase(event),
+        input_preview: inputPreview,
+        response_preview: responsePreview,
+        human_summary: summary,
+        te_display_summary: summary,
+        summary_source: summary ? "native_hook_redacted" : undefined,
+        error: failure.error,
+        exit_code: failure.exit_code,
+        success: failure.failed ? false : undefined,
+        ok: failure.failed ? false : undefined,
+        te_tool_capture_version: toolExecutionPhase(event, input) ? "v1" : undefined,
+        te_tool_activity_source: toolExecutionPhase(event, input) ? "native_hook" : undefined,
+        te_tool_execution_phase: toolExecutionPhase(event, input),
+        workflow_status: event === "SessionEnd" ? (failure.failed ? "failed" : "completed") : undefined,
+        outcome_result_status: event === "SessionEnd" ? (failure.failed ? "failed" : "succeeded") : undefined,
         ...traceparentMetadata(input),
     };
+}
+function codexStatePath(input) {
+    const nativeSession = firstPresent(input.session_id, input.conversation_id, input.transcript_path, sessionId(input));
+    return path.join(process.env.HOME || process.cwd(), ".tuningengines", "sessions", "codex-turns", `${sha(nativeSession)}.json`);
+}
+function readCodexTurnState(input) {
+    try {
+        const state = readJsonFile(codexStatePath(input));
+        return state.turn_id && state.run_id && state.request_id ? state : undefined;
+    }
+    catch {
+        return undefined;
+    }
+}
+function writeCodexTurnState(input, state) {
+    const target = codexStatePath(input);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    const temporary = `${target}.${process.pid}.tmp`;
+    fs.writeFileSync(temporary, JSON.stringify(state) + "\n", { mode: 0o600 });
+    fs.renameSync(temporary, target);
+}
+function clearCodexTurnState(input) {
+    try {
+        fs.unlinkSync(codexStatePath(input));
+    }
+    catch (error) {
+        if (error?.code !== "ENOENT")
+            throw error;
+    }
+}
+function prepareCodexTraceInput(input, event) {
+    if (event === "SessionStart") {
+        clearCodexTurnState(input);
+        return input;
+    }
+    let turnId = boundedId(firstPresent(input.turn_id, input.turnId));
+    if (event === "UserPromptSubmit" && !turnId)
+        turnId = `turn_codex_${crypto.randomUUID()}`;
+    if (turnId) {
+        const enriched = { ...input, turn_id: turnId };
+        const state = {
+            session_id: safeSessionId(enriched),
+            turn_id: turnId,
+            run_id: runIdFor(enriched, "codex"),
+            request_id: requestIdFor(enriched, "codex"),
+            updated_at: new Date().toISOString(),
+        };
+        writeCodexTurnState(input, state);
+        return { ...enriched, run_id: state.run_id, request_id: state.request_id };
+    }
+    const state = readCodexTurnState(input);
+    return state
+        ? { ...input, turn_id: state.turn_id, run_id: state.run_id, request_id: state.request_id }
+        : input;
 }
 function sidecarRunIds(runtime, command) {
     const seed = [runtime, command.join(" "), process.cwd(), Date.now(), process.pid].join(":");
@@ -435,11 +719,18 @@ function upsertHeader(headers, name, value) {
     else
         headers[index] = next;
 }
+function removeHeader(headers, name) {
+    const prefix = `${name.toLowerCase()}:`;
+    for (let index = headers.length - 1; index >= 0; index -= 1) {
+        if (headers[index].toLowerCase().startsWith(prefix))
+            headers.splice(index, 1);
+    }
+}
 function observedCommandEnv(runtime, ids, activeGoal) {
     const env = {
         ...process.env,
-        TE_REQUEST_ID: ids.requestId,
-        TE_RUN_ID: ids.runId,
+        TE_REQUEST_ID: runtime === "codex" ? undefined : ids.requestId,
+        TE_RUN_ID: runtime === "codex" ? undefined : ids.runId,
         TE_TELEMETRY_SOURCE: "sidecar",
         TE_WORK_ITEM_ID: activeGoal?.work_item_id,
         TE_OUTCOME_CONTEXT_ID: activeGoal?.outcome_context_id,
@@ -456,8 +747,12 @@ function observedCommandEnv(runtime, ids, activeGoal) {
             .split(/\r?\n/)
             .map((header) => header.trim())
             .filter(Boolean);
-        upsertHeader(headers, "X-TE-Request-ID", ids.requestId);
-        upsertHeader(headers, "X-TE-Run-ID", ids.runId);
+        if (runtime === "codex") {
+            removeHeader(headers, "X-TE-Request-ID");
+            removeHeader(headers, "X-TE-Run-ID");
+        }
+        upsertHeader(headers, "X-TE-Request-ID", runtime === "codex" ? undefined : ids.requestId);
+        upsertHeader(headers, "X-TE-Run-ID", runtime === "codex" ? undefined : ids.runId);
         upsertHeader(headers, "X-TE-Work-Item-ID", activeGoal?.work_item_id);
         upsertHeader(headers, "X-TE-Outcome-Key", activeGoal?.outcome_key || activeGoal?.goal_key);
         upsertHeader(headers, "X-TE-Outcome-Context-ID", activeGoal?.outcome_context_id);
@@ -792,14 +1087,70 @@ function installOpenCode(projectDir) {
     const configPath = path.join(projectDir, "opencode.json");
     const config = readJsonFile(configPath);
     config.$schema ||= "https://opencode.ai/config.json";
-    config.plugin = Array(config.plugin || []);
-    if (!config.plugin.includes("opencode-helicone-session"))
-        config.plugin.push("opencode-helicone-session");
+    config.plugin = Array.isArray(config.plugin) ? config.plugin : [config.plugin].filter(Boolean);
+    const pluginRef = "./.opencode/plugins/tuning-engines.js";
+    config.plugin = config.plugin.filter((entry) => String(entry) !== "opencode-helicone-session");
+    if (!config.plugin.includes(pluginRef))
+        config.plugin.push(pluginRef);
     writeJsonFile(configPath, config);
+    const pluginPath = path.join(projectDir, ".opencode", "plugins", "tuning-engines.js");
+    fs.mkdirSync(path.dirname(pluginPath), { recursive: true });
+    fs.writeFileSync(pluginPath, openCodePluginSource(), { mode: 0o600 });
     const commandPath = path.join(projectDir, ".opencode", "commands", "te-goal.md");
     fs.mkdirSync(path.dirname(commandPath), { recursive: true });
     fs.writeFileSync(commandPath, "---\ndescription: Label the desired Tuning Engines outcome\n---\n\nRun `te goal start \"$ARGUMENTS\"` in the project terminal, then continue the work. Record the result with `te goal complete --result succeeded` when finished.\n", { mode: 0o600 });
-    return [configPath, commandPath];
+    return [configPath, pluginPath, commandPath];
+}
+function openCodePluginSource() {
+    return `import { spawnSync } from "node:child_process";
+
+function emit(event, payload = {}) {
+  try {
+    const result = spawnSync("te", ["guard", "opencode", "hook", "--event", event], {
+      input: JSON.stringify(payload),
+      encoding: "utf8",
+      stdio: ["pipe", "ignore", "ignore"],
+      timeout: 30000,
+    });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+function withSession(input) {
+  const session = input?.session || {};
+  return {
+    ...input,
+    session_id: input?.session_id || session.id || input?.sessionID,
+    conversation_id: input?.conversation_id || session.id,
+    cwd: input?.cwd || session.cwd || process.cwd(),
+  };
+}
+
+export const TuningEnginesPlugin = async () => ({
+  event: async ({ event }) => {
+    if (event?.type === "session.created") emit("session.created", withSession(event.properties || event));
+    if (event?.type === "session.idle") emit("session.idle", withSession(event.properties || event));
+    if (event?.type === "session.error") emit("session.error", withSession({ ...(event.properties || event), error: event.error || event.properties?.error }));
+  },
+  "permission.asked": async (input) => {
+    emit("permission.asked", withSession(input));
+  },
+  "permission.replied": async (input) => {
+    const granted = Boolean(input?.granted ?? input?.approved ?? input?.allowed);
+    emit(granted ? "approval.approved" : "approval.denied", withSession({ ...input, granted }));
+  },
+  "tool.execute.before": async (input) => {
+    emit("tool.execute.before", withSession(input));
+  },
+  "tool.execute.after": async (input) => {
+    emit("tool.execute.after", withSession(input));
+  },
+});
+
+export default TuningEnginesPlugin;
+`;
 }
 function installCline(projectDir, commandName = "cline") {
     const hookDir = path.join(projectDir, ".clinerules", "hooks");
@@ -920,13 +1271,18 @@ async function recordTrace(client, input, event, decision, runtime = "claude_cod
     const workspace = workspaceMetadata(input);
     const nativeMetadata = nativeEventMetadata(input, event, runtime);
     const modelMetadata = modelEnvMetadata();
+    const failure = hookFailureData(input);
+    const completionEvent = event === "PostToolUse" || event === "PostToolUseFailure" || event === "tool.execute.after";
+    const turnFinished = event === "Stop" || event === "StopFailure" || event === "SessionEnd";
+    const runStatus = turnFinished ? (failure.failed || event === "StopFailure" ? "failed" : "succeeded") : "running";
     await client.createTrace({
         run_id: runId,
         request_id: requestId,
         name: input.cwd ? `${traceRuntimeLabel(runtime)} - ${path.basename(String(input.cwd))}` : traceRuntimeLabel(runtime),
         runtime,
         telemetry_source: "sidecar",
-        status: event === "Stop" || event === "SubagentStop" ? "succeeded" : "running",
+        status: runStatus,
+        ended_at: turnFinished ? now : undefined,
         metadata: {
             request_id: requestId,
             run_id: runId,
@@ -936,9 +1292,16 @@ async function recordTrace(client, input, event, decision, runtime = "claude_cod
             thread_id: threadId(input),
             ...workspace,
             ...modelMetadata,
-            turn_id: input.turn_id,
-            task_id: input.task_id,
-            parent_task_id: input.parent_task_id,
+            turn_id: nativeMetadata.turn_id,
+            task_id: nativeMetadata.task_id,
+            parent_task_id: nativeMetadata.parent_task_id,
+            tool_call_id: nativeMetadata.tool_call_id,
+            input_preview: nativeMetadata.input_preview,
+            response_preview: nativeMetadata.response_preview,
+            human_summary: nativeMetadata.human_summary,
+            te_display_summary: nativeMetadata.te_display_summary,
+            error: nativeMetadata.error,
+            exit_code: nativeMetadata.exit_code,
             agent_id: input.agent_id,
             parent_agent_id: input.parent_agent_id,
             ...nativeMetadata,
@@ -950,7 +1313,7 @@ async function recordTrace(client, input, event, decision, runtime = "claude_cod
                 id: nativeEventId(input, event, runtime),
                 parent_id: nativeParentEventId(input, event, runtime),
                 type: eventType(event),
-                status: eventStatus(event, decision),
+                status: statusForEvent(input, event, decision),
                 at: now,
                 metadata: compact({
                     request_id: requestId,
@@ -959,17 +1322,27 @@ async function recordTrace(client, input, event, decision, runtime = "claude_cod
                     conversation_id: input.conversation_id || input.thread_id || sessionId(input),
                     thread_id: threadId(input),
                     hook_event: event,
-                    phase: event,
+                    phase: toolExecutionPhase(event, input) || (event === "PermissionDenied" ? "blocked" : event === "PermissionRequest" ? "proposed" : event),
                     name: tool || event,
                     tool_name: tool,
-                    tool_input: event === "PostToolUse" ? undefined : toolInput(input),
-                    tool_response: event === "PostToolUse" ? toolResponse(input) : undefined,
+                    tool_call_id: nativeMetadata.tool_call_id,
+                    turn_id: nativeMetadata.turn_id,
+                    tool_input: completionEvent ? undefined : toolInput(input),
+                    tool_response: completionEvent ? toolResponse(input) : undefined,
+                    input_preview: nativeMetadata.input_preview,
+                    response_preview: nativeMetadata.response_preview,
+                    human_summary: nativeMetadata.human_summary,
+                    te_display_summary: nativeMetadata.te_display_summary,
+                    error: failure.error,
+                    exit_code: failure.exit_code,
+                    success: failure.failed ? false : undefined,
+                    ok: failure.failed ? false : undefined,
                     ...workspace,
                     ...modelMetadata,
                     prompt_summary: promptSummary(input),
-                    turn_id: input.turn_id,
-                    task_id: input.task_id,
-                    parent_task_id: input.parent_task_id,
+                    final_response: event === "Stop" ? nativeMetadata.response_preview : undefined,
+                    task_id: nativeMetadata.task_id,
+                    parent_task_id: nativeMetadata.parent_task_id,
                     agent_id: input.agent_id,
                     parent_agent_id: input.parent_agent_id,
                     ...nativeMetadata,
@@ -1032,11 +1405,13 @@ function registerGuardCommands(program, getClient) {
         const ids = sidecarRunIds(runtime, commandParts);
         const client = getClient();
         const activeGoal = (0, goal_context_1.loadGoalContext)();
-        try {
-            await recordSidecarRun(client, runtime, commandParts, ids, "running", "started");
-        }
-        catch (err) {
-            console.error(`Tuning Engines guard warning: ${err.message}`);
+        if (runtime !== "codex") {
+            try {
+                await recordSidecarRun(client, runtime, commandParts, ids, "running", "started");
+            }
+            catch (err) {
+                console.error(`Tuning Engines guard warning: ${err.message}`);
+            }
         }
         let exitCode = 0;
         try {
@@ -1046,11 +1421,13 @@ function registerGuardCommands(program, getClient) {
             console.error(`Observed command failed to start: ${err.message}`);
             exitCode = 127;
         }
-        try {
-            await recordSidecarRun(client, runtime, commandParts, ids, exitCode === 0 ? "succeeded" : "failed", exitCode === 0 ? "succeeded" : "failed", exitCode);
-        }
-        catch (err) {
-            console.error(`Tuning Engines guard warning: ${err.message}`);
+        if (runtime !== "codex") {
+            try {
+                await recordSidecarRun(client, runtime, commandParts, ids, exitCode === 0 ? "succeeded" : "failed", exitCode === 0 ? "succeeded" : "failed", exitCode);
+            }
+            catch (err) {
+                console.error(`Tuning Engines guard warning: ${err.message}`);
+            }
         }
         process.exit(exitCode);
     });
@@ -1285,8 +1662,13 @@ function registerGuardCommands(program, getClient) {
         .option("--event <event>", "Codex hook event name")
         .action(async (opts) => {
         try {
-            const input = safeJsonParse(await readStdin());
-            await recordTrace(getClient(), input, hookEvent(input, opts.event), undefined, "codex");
+            const rawInput = safeJsonParse(await readStdin());
+            const event = hookEvent(rawInput, opts.event);
+            const input = prepareCodexTraceInput(rawInput, event);
+            if (event !== "SessionStart")
+                await recordTrace(getClient(), input, event, undefined, "codex");
+            if (event === "SessionEnd")
+                clearCodexTurnState(rawInput);
         }
         catch (err) {
             console.error(`Tuning Engines Codex telemetry warning: ${err.message}`);
@@ -1296,12 +1678,22 @@ function registerGuardCommands(program, getClient) {
         .option("--project <dir>", "Project directory", process.cwd()).action((opts) => {
         try {
             const paths = installOpenCode(path.resolve(opts.project));
-            console.log(`Installed OpenCode session tracking in ${paths.join(" and ")}`);
-            console.log("OpenCode will load opencode-helicone-session on startup; Tuning Engines recognizes its pseudonymous session header.");
+            console.log(`Installed OpenCode native tracking in ${paths.join(" and ")}`);
+            console.log("OpenCode will load the local Tuning Engines plugin on startup and emit tool, permission, and session evidence.");
         }
         catch (err) {
             console.error(err.message);
             process.exit(1);
+        }
+    });
+    opencode.command("hook").description("OpenCode plugin hook entrypoint. Reads hook JSON from stdin.")
+        .option("--event <event>", "OpenCode hook event name").action(async (opts) => {
+        try {
+            const input = safeJsonParse(await readStdin());
+            await recordTrace(getClient(), input, hookEvent(input, opts.event), undefined, "opencode");
+        }
+        catch (err) {
+            console.error(`Tuning Engines OpenCode telemetry warning: ${err.message}`);
         }
     });
     cline.command("install").description("Install Cline project hooks")
