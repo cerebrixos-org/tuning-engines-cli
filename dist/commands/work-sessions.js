@@ -97,5 +97,75 @@ function registerWorkSessionCommands(program, getClient) {
             process.exit(1);
         }
     });
+    ws.command("repair-preview <id>")
+        .description("Preview an evidence move, split, exclude, or restore without applying it")
+        .requiredOption("--data <json>", "Repair selection JSON")
+        .action(async (id, opts) => {
+        try {
+            output.json(await getClient().previewWorkItemRepair(id, parseJson(opts.data)));
+        }
+        catch (err) {
+            console.error(err.message);
+            process.exit(1);
+        }
+    });
+    ws.command("repair <id>")
+        .description("Apply a previously previewed Work Session repair")
+        .requiredOption("--repair-id <id>", "Repair preview public ID")
+        .option("--target-work-item-id <id>", "Target Work Session for a move")
+        .option("--split-title <title>", "Title for a split Work Session")
+        .option("--reason <text>", "Audit reason")
+        .action(async (id, opts) => {
+        try {
+            output.json(await getClient().applyWorkItemRepair(id, {
+                repair_id: opts.repairId,
+                target_work_item_id: opts.targetWorkItemId,
+                split_title: opts.splitTitle,
+                reason: opts.reason,
+            }));
+        }
+        catch (err) {
+            console.error(err.message);
+            process.exit(1);
+        }
+    });
+    ws.command("repair-undo <id>")
+        .description("Undo an applied Work Session repair")
+        .requiredOption("--repair-id <id>", "Applied repair public ID")
+        .option("--reason <text>", "Audit reason")
+        .action(async (id, opts) => {
+        try {
+            output.json(await getClient().undoWorkItemRepair(id, {
+                repair_id: opts.repairId,
+                reason: opts.reason,
+            }));
+        }
+        catch (err) {
+            console.error(err.message);
+            process.exit(1);
+        }
+    });
+    ws.command("bulk-preview")
+        .description("Preview a bulk Work Session review operation")
+        .requiredOption("--data <json>", "Bulk operation JSON")
+        .action((opts) => getClient().previewWorkItemBulkOperation(parseJson(opts.data))
+        .then(output.json)
+        .catch(fail));
+    ws.command("bulk-apply <id>")
+        .description("Apply a previously previewed bulk operation")
+        .action((id) => getClient().applyWorkItemBulkOperation(id)
+        .then(output.json)
+        .catch(fail));
+}
+function parseJson(raw) {
+    const value = JSON.parse(raw);
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error("data must be a JSON object");
+    }
+    return value;
+}
+function fail(error) {
+    console.error(error.message);
+    process.exit(1);
 }
 //# sourceMappingURL=work-sessions.js.map

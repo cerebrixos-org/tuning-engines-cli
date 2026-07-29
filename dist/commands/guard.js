@@ -42,7 +42,7 @@ const output = __importStar(require("../output"));
 const goal_context_1 = require("../goal_context");
 const config_1 = require("../config");
 const version_1 = require("../version");
-const NATIVE_EVENT_CONTRACT_VERSION = "te-native-event-v1";
+const NATIVE_EVENT_CONTRACT_VERSION = "te-native-event-v2";
 const HOOK_EVENTS = [
     "SessionStart",
     "SessionEnd",
@@ -64,6 +64,7 @@ const HOOK_EVENTS = [
 const CLINE_HOOK_EVENTS = ["TaskStart", "TaskResume", "TaskCancel", "TaskComplete", "PreToolUse", "PostToolUse", "UserPromptSubmit", "PreCompact"];
 const CODEX_HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "SessionEnd", "PreCompact", "PostCompact", "Stop", "SubagentStart", "SubagentStop"];
 const RICH_WRAPPER_RUNTIMES = new Set(["codex", "opencode", "aider", "continue", "zed", "custom"]);
+const TURN_SCOPED_RUNTIMES = new Set(["codex", "claude_code"]);
 const TOOL_LIFECYCLE_EVENTS = new Set(["PreToolUse", "PostToolUse", "PostToolUseFailure", "tool.execute.before", "tool.execute.after"]);
 const SECRET_PATTERNS = [
     /\bsk-te-[A-Za-z0-9_\-]{16,}\b/g,
@@ -85,11 +86,22 @@ function writeJsonFile(filePath, data) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", { mode: 0o600 });
 }
+function resolvedCliEntrypoint() {
+    return path.resolve(process.argv[1] || __filename);
+}
+function shellQuote(value) {
+    if (process.platform === "win32")
+        return `"${value.replace(/"/g, '\\"')}"`;
+    return `'${value.replace(/'/g, "'\\''")}'`;
+}
+function installedCliCommand(args) {
+    return [process.execPath, resolvedCliEntrypoint(), ...args].map(shellQuote).join(" ");
+}
 function hookCommand(event, mode, failOpen) {
-    const pieces = ["te", "guard", "claude-code", "hook", "--event", event, "--mode", mode];
+    const pieces = ["guard", "claude-code", "hook", "--event", event, "--mode", mode];
     if (failOpen)
         pieces.push("--fail-open");
-    return pieces.join(" ");
+    return installedCliCommand(pieces);
 }
 function claudeInstallModeSummary(mode, failOpen) {
     if (mode === "observe")
@@ -97,7 +109,11 @@ function claudeInstallModeSummary(mode, failOpen) {
     return failOpen ? "enforce (fail-open)" : "enforce (fail-closed for PreToolUse)";
 }
 function codexHookCommand(event) {
-    return ["te", "guard", "codex", "hook", "--event", event].join(" ");
+    return installedCliCommand(["guard", "codex", "hook", "--event", event]);
+}
+function isGuardHookCommand(command, runtime) {
+    const normalized = String(command || "").replace(/["']/g, "").replace(/\s+/g, " ");
+    return normalized.includes(`guard ${runtime} hook`);
 }
 function removeExistingGuardHooks(hooks) {
     for (const event of Object.keys(hooks || {})) {
@@ -106,7 +122,7 @@ function removeExistingGuardHooks(hooks) {
                 .map((entry) => ({
                 ...entry,
                 hooks: Array.isArray(entry.hooks)
-                    ? entry.hooks.filter((hook) => !String(hook.command || "").includes("guard claude-code hook"))
+                    ? entry.hooks.filter((hook) => !isGuardHookCommand(hook.command, "claude-code"))
                     : entry.hooks,
             }))
                 .filter((entry) => !Array.isArray(entry.hooks) || entry.hooks.length > 0)
@@ -132,7 +148,7 @@ function removeExistingCodexHooks(hooks) {
                 .map((entry) => ({
                 ...entry,
                 hooks: Array.isArray(entry.hooks)
-                    ? entry.hooks.filter((hook) => !String(hook.command || "").includes("te guard codex hook"))
+                    ? entry.hooks.filter((hook) => !isGuardHookCommand(hook.command, "codex"))
                     : entry.hooks,
             }))
                 .filter((entry) => !Array.isArray(entry.hooks) || entry.hooks.length > 0)
@@ -222,6 +238,19 @@ function compactString(value, limit = 240) {
     const normalized = redact(text).replace(/\s+/g, " ").trim();
     return normalized && normalized !== "{}" && normalized !== "[]" ? normalized.slice(0, limit) : undefined;
 }
+function safeDescriptiveText(value, limit = 240) {
+    if (typeof value !== "string")
+        return undefined;
+    const raw = value.trim();
+    if (!raw ||
+        raw.includes("\n") ||
+        /(?:^|:\s*)[\{\[]/.test(raw) ||
+        /\bgAAAA[A-Za-z0-9_-]{16,}\b/.test(raw) ||
+        /^(?:Codex proposed|Bash completed|Shell command completed):/i.test(raw) ||
+        /(?:&&|\|\||[|;`]|\$\()/.test(raw))
+        return undefined;
+    return compactString(raw, limit);
+}
 function sessionId(input) {
     return String(firstPresent(process.env.TE_NATIVE_SESSION_ID, process.env.TE_NATIVE_THREAD_ID, input.session_id, input.conversation_id, input.taskId, input.task_id, input.transcript_path, process.env.CLAUDE_PROJECT_DIR, process.cwd()));
 }
@@ -245,8 +274,8 @@ function runIdFor(input, runtime = "claude_code") {
     if (explicit)
         return explicit;
     const turn = firstPresent(input.turn_id, input.turnId);
-    if (runtime === "codex" && turn)
-        return `run_codex_${sha(turn).slice(0, 24)}`;
+    if (TURN_SCOPED_RUNTIMES.has(runtime) && turn)
+        return `run_${runtimeSlug(runtime)}_${sha(turn).slice(0, 24)}`;
     const environmentId = boundedId(process.env.TE_RUN_ID);
     if (environmentId)
         return environmentId;
@@ -257,8 +286,8 @@ function requestIdFor(input, runtime = "claude_code") {
     if (explicit)
         return explicit;
     const turn = firstPresent(input.turn_id, input.turnId);
-    if (runtime === "codex" && turn)
-        return `req_codex_${sha(turn).slice(0, 24)}`;
+    if (TURN_SCOPED_RUNTIMES.has(runtime) && turn)
+        return `req_${runtimeSlug(runtime)}_${sha(turn).slice(0, 24)}`;
     const environmentId = boundedId(process.env.TE_REQUEST_ID);
     if (environmentId)
         return environmentId;
@@ -387,14 +416,15 @@ function previewForInput(input) {
 }
 function previewForResponse(input) {
     if (toolName(input)) {
-        return compactString(firstPresent(input.result_summary, toolResponse(input)?.summary), 240);
+        return safeDescriptiveText(firstPresent(input.result_summary, toolResponse(input)?.summary), 240);
     }
     return compactString(firstPresent(input.response_preview, input.responsePreview, input.output_preview, input.outputPreview, input.last_assistant_message, input.result_summary), 1200);
 }
 function humanSummary(input, event, runtime) {
     const explicit = firstPresent(input.human_summary, input.te_display_summary, input.summary);
-    if (explicit)
-        return compactString(explicit);
+    const safeExplicit = safeDescriptiveText(explicit);
+    if (safeExplicit)
+        return safeExplicit;
     const tool = toolName(input);
     const failure = hookFailureData(input);
     if (event === "PermissionRequest")
@@ -410,9 +440,11 @@ function humanSummary(input, event, runtime) {
     if (event === "SubagentStop")
         return `Subagent finished: ${subagentResultSummary(input) || "task completed"}`;
     if (event === "Stop")
-        return compactString(input.last_assistant_message || input.response_preview, 240) || "Agent response completed.";
-    if (event === "SessionEnd")
-        return "Codex session completed.";
+        return safeDescriptiveText(input.last_assistant_message || input.response_preview, 240) || "Agent response completed.";
+    if (event === "SessionEnd") {
+        return safeDescriptiveText(input.last_assistant_message || input.response_preview, 240) ||
+            `${traceRuntimeLabel(runtime)} session completed.`;
+    }
     if (event === "PreToolUse" || event === "tool.execute.before")
         return tool ? safeToolSummary(input, false) : undefined;
     if (event === "PostToolUse" || event === "PostToolUseFailure" || event === "tool.execute.after") {
@@ -455,7 +487,28 @@ function friendlyToolLabel(value) {
 }
 function safeToolInputPreview(input) {
     const values = toolInput(input) || {};
-    return compactString(firstPresent(values.summary, values.description, values.task_name, values.taskName, values.name, toolPath(input)));
+    return safeDescriptiveText(firstPresent(values.summary, values.description, values.task_name, values.taskName, values.name, toolPath(input)));
+}
+function shellCommandSummary(input) {
+    const values = toolInput(input) || {};
+    const command = String(firstPresent(values.command, values.cmd, values.script) || "");
+    if (!command)
+        return undefined;
+    const lower = command.toLowerCase();
+    if (/(?:redis|cache|solid_cache|memcached)/.test(lower))
+        return "Checked cache configuration";
+    if (/(?:database|database\.yml|postgres|mysql|sqlite|db:)/.test(lower)) {
+        return /(?:\brg\b|\bgrep\b|\bfind\b)/.test(lower)
+            ? "Searched project configuration for database settings"
+            : "Checked database configuration";
+    }
+    if (/\bgit\s+status\b/.test(lower))
+        return "Checked repository status";
+    if (/(?:\brg\b|\bgrep\b)/.test(lower))
+        return "Searched project files";
+    if (/(?:^|\s)(?:ls|find)(?:\s|$)/.test(lower))
+        return "Listed project files";
+    return undefined;
 }
 function safeToolSummary(input, completed) {
     const name = String(toolName(input) || "Tool");
@@ -470,6 +523,9 @@ function safeToolSummary(input, completed) {
         return completed
             ? `Subagent finished: ${subagentResultSummary(input) || subagentTaskName(input) || "task completed"}`
             : `Started subagent: ${subagentTaskName(input) || "delegated task"}`;
+    }
+    if (/^(bash|shell|exec_command|write_stdin)$/i.test(name)) {
+        return shellCommandSummary(input) || (completed ? "Shell command completed." : "Run shell command.");
     }
     const safeInput = safeToolInputPreview(input);
     const safeResponse = previewForResponse(input);
@@ -605,8 +661,12 @@ function nativeEventMetadata(input, event, runtime) {
     const inputPreview = previewForInput(input);
     const responsePreview = previewForResponse(input);
     const summary = humanSummary(input, event, runtime);
+    const cliEntrypoint = resolvedCliEntrypoint();
     return {
         native_event_contract_version: NATIVE_EVENT_CONTRACT_VERSION,
+        cli_version: version_1.CLI_VERSION,
+        resolved_hook_command_path: cliEntrypoint,
+        resolved_hook_command_path_hash: sha(cliEntrypoint),
         native_correlation_source: runtime,
         runtime,
         framework: runtime,
@@ -642,59 +702,62 @@ function nativeEventMetadata(input, event, runtime) {
         te_tool_execution_phase: toolExecutionPhase(event, input),
         workflow_status: event === "SessionEnd" ? (failure.failed ? "failed" : "completed") : undefined,
         outcome_result_status: event === "SessionEnd" ? (failure.failed ? "failed" : "succeeded") : undefined,
+        completed_at: event === "SessionEnd" ? new Date().toISOString() : undefined,
         ...traceparentMetadata(input),
     };
 }
-function codexStatePath(input) {
+function nativeTurnStatePath(input, runtime) {
     const nativeSession = firstPresent(input.session_id, input.conversation_id, input.transcript_path, sessionId(input));
-    return path.join(process.env.HOME || process.cwd(), ".tuningengines", "sessions", "codex-turns", `${sha(nativeSession)}.json`);
+    return path.join(process.env.HOME || process.cwd(), ".tuningengines", "sessions", `${runtimeSlug(runtime)}-turns`, `${sha(nativeSession)}.json`);
 }
-function readCodexTurnState(input) {
+function readNativeTurnState(input, runtime) {
     try {
-        const state = readJsonFile(codexStatePath(input));
+        const state = readJsonFile(nativeTurnStatePath(input, runtime));
         return state.turn_id && state.run_id && state.request_id ? state : undefined;
     }
     catch {
         return undefined;
     }
 }
-function writeCodexTurnState(input, state) {
-    const target = codexStatePath(input);
+function writeNativeTurnState(input, runtime, state) {
+    const target = nativeTurnStatePath(input, runtime);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     const temporary = `${target}.${process.pid}.tmp`;
     fs.writeFileSync(temporary, JSON.stringify(state) + "\n", { mode: 0o600 });
     fs.renameSync(temporary, target);
 }
-function clearCodexTurnState(input) {
+function clearNativeTurnState(input, runtime) {
     try {
-        fs.unlinkSync(codexStatePath(input));
+        fs.unlinkSync(nativeTurnStatePath(input, runtime));
     }
     catch (error) {
         if (error?.code !== "ENOENT")
             throw error;
     }
 }
-function prepareCodexTraceInput(input, event) {
+function prepareTurnScopedTraceInput(input, event, runtime) {
+    if (!TURN_SCOPED_RUNTIMES.has(runtime))
+        return input;
     if (event === "SessionStart") {
-        clearCodexTurnState(input);
+        clearNativeTurnState(input, runtime);
         return input;
     }
     let turnId = boundedId(firstPresent(input.turn_id, input.turnId));
     if (event === "UserPromptSubmit" && !turnId)
-        turnId = `turn_codex_${crypto.randomUUID()}`;
+        turnId = `turn_${runtimeSlug(runtime)}_${crypto.randomUUID()}`;
     if (turnId) {
         const enriched = { ...input, turn_id: turnId };
         const state = {
             session_id: safeSessionId(enriched),
             turn_id: turnId,
-            run_id: runIdFor(enriched, "codex"),
-            request_id: requestIdFor(enriched, "codex"),
+            run_id: runIdFor(enriched, runtime),
+            request_id: requestIdFor(enriched, runtime),
             updated_at: new Date().toISOString(),
         };
-        writeCodexTurnState(input, state);
+        writeNativeTurnState(input, runtime, state);
         return { ...enriched, run_id: state.run_id, request_id: state.request_id };
     }
-    const state = readCodexTurnState(input);
+    const state = readNativeTurnState(input, runtime);
     return state
         ? { ...input, turn_id: state.turn_id, run_id: state.run_id, request_id: state.request_id }
         : input;
@@ -729,8 +792,8 @@ function removeHeader(headers, name) {
 function observedCommandEnv(runtime, ids, activeGoal) {
     const env = {
         ...process.env,
-        TE_REQUEST_ID: runtime === "codex" ? undefined : ids.requestId,
-        TE_RUN_ID: runtime === "codex" ? undefined : ids.runId,
+        TE_REQUEST_ID: TURN_SCOPED_RUNTIMES.has(runtime) ? undefined : ids.requestId,
+        TE_RUN_ID: TURN_SCOPED_RUNTIMES.has(runtime) ? undefined : ids.runId,
         TE_TELEMETRY_SOURCE: "sidecar",
         TE_WORK_ITEM_ID: activeGoal?.work_item_id,
         TE_OUTCOME_CONTEXT_ID: activeGoal?.outcome_context_id,
@@ -747,12 +810,12 @@ function observedCommandEnv(runtime, ids, activeGoal) {
             .split(/\r?\n/)
             .map((header) => header.trim())
             .filter(Boolean);
-        if (runtime === "codex") {
+        if (TURN_SCOPED_RUNTIMES.has(runtime)) {
             removeHeader(headers, "X-TE-Request-ID");
             removeHeader(headers, "X-TE-Run-ID");
         }
-        upsertHeader(headers, "X-TE-Request-ID", runtime === "codex" ? undefined : ids.requestId);
-        upsertHeader(headers, "X-TE-Run-ID", runtime === "codex" ? undefined : ids.runId);
+        upsertHeader(headers, "X-TE-Request-ID", TURN_SCOPED_RUNTIMES.has(runtime) ? undefined : ids.requestId);
+        upsertHeader(headers, "X-TE-Run-ID", TURN_SCOPED_RUNTIMES.has(runtime) ? undefined : ids.runId);
         upsertHeader(headers, "X-TE-Work-Item-ID", activeGoal?.work_item_id);
         upsertHeader(headers, "X-TE-Outcome-Key", activeGoal?.outcome_key || activeGoal?.goal_key);
         upsertHeader(headers, "X-TE-Outcome-Context-ID", activeGoal?.outcome_context_id);
@@ -883,7 +946,7 @@ function installedHookCommands(settings, event) {
         const hooks = Array.isArray(entry?.hooks) ? entry.hooks : [];
         return hooks
             .map((hook) => String(hook?.command || hook || ""))
-            .filter((command) => command.includes("guard claude-code hook"));
+            .filter((command) => isGuardHookCommand(command, "claude-code"));
     });
 }
 function hookCommandPresent(settings, event) {
@@ -895,6 +958,24 @@ function requiredHookStatus(settings) {
         missing: required.filter((event) => !hookCommandPresent(settings, event)),
         present: required.filter((event) => hookCommandPresent(settings, event)),
     };
+}
+function installedCodexHookCommands(settings) {
+    return CODEX_HOOK_EVENTS.flatMap((event) => {
+        const entries = Array.isArray(settings.hooks?.[event]) ? settings.hooks[event] : [];
+        return entries.flatMap((entry) => (Array.isArray(entry?.hooks) ? entry.hooks : [])
+            .map((hook) => String(hook?.command || hook || ""))
+            .filter((command) => isGuardHookCommand(command, "codex")));
+    });
+}
+function activeTeCommand() {
+    const lookup = process.platform === "win32"
+        ? (0, child_process_1.spawnSync)("where", ["te"], { encoding: "utf8", shell: true })
+        : (0, child_process_1.spawnSync)("sh", ["-lc", "command -v te"], { encoding: "utf8" });
+    const executable = lookup.status === 0 ? lookup.stdout.trim().split(/\r?\n/)[0] : undefined;
+    if (!executable)
+        return {};
+    const version = (0, child_process_1.spawnSync)(executable, ["--version"], { encoding: "utf8" });
+    return { path: executable, version: version.status === 0 ? version.stdout.trim() : undefined };
 }
 function claudeDoctorRows(projectDir, shared = false) {
     const settingsPath = claudeSettingsPath(projectDir, shared);
@@ -1272,7 +1353,6 @@ async function recordTrace(client, input, event, decision, runtime = "claude_cod
     const nativeMetadata = nativeEventMetadata(input, event, runtime);
     const modelMetadata = modelEnvMetadata();
     const failure = hookFailureData(input);
-    const completionEvent = event === "PostToolUse" || event === "PostToolUseFailure" || event === "tool.execute.after";
     const turnFinished = event === "Stop" || event === "StopFailure" || event === "SessionEnd";
     const runStatus = turnFinished ? (failure.failed || event === "StopFailure" ? "failed" : "succeeded") : "running";
     await client.createTrace({
@@ -1327,8 +1407,6 @@ async function recordTrace(client, input, event, decision, runtime = "claude_cod
                     tool_name: tool,
                     tool_call_id: nativeMetadata.tool_call_id,
                     turn_id: nativeMetadata.turn_id,
-                    tool_input: completionEvent ? undefined : toolInput(input),
-                    tool_response: completionEvent ? toolResponse(input) : undefined,
                     input_preview: nativeMetadata.input_preview,
                     response_preview: nativeMetadata.response_preview,
                     human_summary: nativeMetadata.human_summary,
@@ -1339,8 +1417,8 @@ async function recordTrace(client, input, event, decision, runtime = "claude_cod
                     ok: failure.failed ? false : undefined,
                     ...workspace,
                     ...modelMetadata,
-                    prompt_summary: promptSummary(input),
-                    final_response: event === "Stop" ? nativeMetadata.response_preview : undefined,
+                    prompt_summary: event === "UserPromptSubmit" ? promptSummary(input) : undefined,
+                    final_response: event === "Stop" || event === "SessionEnd" ? nativeMetadata.response_preview : undefined,
                     task_id: nativeMetadata.task_id,
                     parent_task_id: nativeMetadata.parent_task_id,
                     agent_id: input.agent_id,
@@ -1405,7 +1483,7 @@ function registerGuardCommands(program, getClient) {
         const ids = sidecarRunIds(runtime, commandParts);
         const client = getClient();
         const activeGoal = (0, goal_context_1.loadGoalContext)();
-        if (runtime !== "codex") {
+        if (!TURN_SCOPED_RUNTIMES.has(runtime)) {
             try {
                 await recordSidecarRun(client, runtime, commandParts, ids, "running", "started");
             }
@@ -1421,7 +1499,7 @@ function registerGuardCommands(program, getClient) {
             console.error(`Observed command failed to start: ${err.message}`);
             exitCode = 127;
         }
-        if (runtime !== "codex") {
+        if (!TURN_SCOPED_RUNTIMES.has(runtime)) {
             try {
                 await recordSidecarRun(client, runtime, commandParts, ids, exitCode === 0 ? "succeeded" : "failed", exitCode === 0 ? "succeeded" : "failed", exitCode);
             }
@@ -1571,9 +1649,10 @@ function registerGuardCommands(program, getClient) {
         let input = {};
         let currentEvent = opts.event;
         try {
-            input = safeJsonParse(await readStdin());
-            const event = hookEvent(input, opts.event);
+            const rawInput = safeJsonParse(await readStdin());
+            const event = hookEvent(rawInput, opts.event);
             currentEvent = event;
+            input = prepareTurnScopedTraceInput(rawInput, event, "claude_code");
             const client = getClient();
             let decision;
             if (event === "PreToolUse") {
@@ -1581,6 +1660,8 @@ function registerGuardCommands(program, getClient) {
             }
             await recordTrace(client, input, event, decision);
             appendClaudeHookStatusForInput(input, event, "uploaded");
+            if (event === "SessionEnd")
+                clearNativeTurnState(rawInput, "claude_code");
             if (event === "PreToolUse" && decision?.allowed === false && mode === "enforce") {
                 appendClaudeHookStatusForInput(input, event, "blocked", decision.message || decision.reason || "Blocked by Tuning Engines policy");
                 console.error(decision.message || decision.reason || "Blocked by Tuning Engines policy");
@@ -1620,8 +1701,80 @@ function registerGuardCommands(program, getClient) {
             }
             writeJsonFile(settingsPath, settings);
             console.log(`Installed Codex hooks in ${settingsPath}`);
+            console.log(`Hook CLI: ${resolvedCliEntrypoint()} (${version_1.CLI_VERSION}, ${NATIVE_EVENT_CONTRACT_VERSION})`);
             console.log("Review and trust the project hooks from Codex /hooks before relying on native goal telemetry.");
             console.log("Native /goal declarations will appear in Inference > Work Sessions.");
+        }
+        catch (err) {
+            console.error(err.message);
+            process.exit(1);
+        }
+    });
+    codex
+        .command("doctor")
+        .description("Check Codex hook version, command path, and turn-trace installation")
+        .option("--project <dir>", "Project directory", process.cwd())
+        .option("--global", "Check ~/.codex/hooks.json instead of project-local .codex/hooks.json")
+        .option("--json", "Output as JSON")
+        .action((opts) => {
+        try {
+            const projectDir = path.resolve(opts.project);
+            const settingsPath = opts.global
+                ? path.join(process.env.HOME || process.cwd(), ".codex", "hooks.json")
+                : path.join(projectDir, ".codex", "hooks.json");
+            const settings = readJsonFile(settingsPath);
+            const commands = installedCodexHookCommands(settings);
+            const expectedEntrypoint = resolvedCliEntrypoint();
+            const requiredEvents = ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionEnd"];
+            const missingEvents = requiredEvents.filter((event) => {
+                const entries = Array.isArray(settings.hooks?.[event]) ? settings.hooks[event] : [];
+                return !entries.some((entry) => (Array.isArray(entry?.hooks) ? entry.hooks : [])
+                    .some((hook) => isGuardHookCommand(hook?.command || hook, "codex")));
+            });
+            const staleCommands = commands.filter((command) => !command.includes(expectedEntrypoint));
+            const active = activeTeCommand();
+            const checks = [
+                {
+                    level: fs.existsSync(settingsPath) ? "ok" : "fail",
+                    check: "Codex hooks file",
+                    detail: settingsPath,
+                },
+                {
+                    level: missingEvents.length ? "fail" : "ok",
+                    check: "Turn lifecycle hooks",
+                    detail: missingEvents.length ? `Missing: ${missingEvents.join(", ")}` : `Present: ${requiredEvents.join(", ")}`,
+                },
+                {
+                    level: staleCommands.length ? "fail" : "ok",
+                    check: "Pinned hook entrypoint",
+                    detail: staleCommands.length
+                        ? `${staleCommands.length} hook command(s) do not use ${expectedEntrypoint}. Reinstall hooks.`
+                        : expectedEntrypoint,
+                },
+                {
+                    level: active.version === version_1.CLI_VERSION ? "ok" : "warn",
+                    check: "Active te command",
+                    detail: active.path ? `${active.path} reports ${active.version || "unknown"}; installer reports ${version_1.CLI_VERSION}.` : "te is not available on PATH.",
+                },
+                {
+                    level: "ok",
+                    check: "Native event contract",
+                    detail: NATIVE_EVENT_CONTRACT_VERSION,
+                },
+            ];
+            const ok = checks.every((check) => check.level !== "fail");
+            if (opts.json) {
+                output.json({ ok, cli_version: version_1.CLI_VERSION, native_event_contract_version: NATIVE_EVENT_CONTRACT_VERSION, settings_path: settingsPath, expected_entrypoint: expectedEntrypoint, active_te: active, checks });
+            }
+            else {
+                console.log("Codex hook doctor");
+                for (const row of checks) {
+                    const marker = row.level === "ok" ? "OK" : row.level === "warn" ? "WARN" : "FAIL";
+                    console.log(`[${marker}] ${row.check}: ${row.detail}`);
+                }
+            }
+            if (!ok)
+                process.exit(1);
         }
         catch (err) {
             console.error(err.message);
@@ -1664,11 +1817,11 @@ function registerGuardCommands(program, getClient) {
         try {
             const rawInput = safeJsonParse(await readStdin());
             const event = hookEvent(rawInput, opts.event);
-            const input = prepareCodexTraceInput(rawInput, event);
+            const input = prepareTurnScopedTraceInput(rawInput, event, "codex");
             if (event !== "SessionStart")
                 await recordTrace(getClient(), input, event, undefined, "codex");
             if (event === "SessionEnd")
-                clearCodexTurnState(rawInput);
+                clearNativeTurnState(rawInput, "codex");
         }
         catch (err) {
             console.error(`Tuning Engines Codex telemetry warning: ${err.message}`);

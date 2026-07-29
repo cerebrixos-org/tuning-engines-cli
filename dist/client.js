@@ -307,6 +307,45 @@ class TuningEnginesClient {
     async confirmWorkItemOutcome(id, params) {
         return this.request("POST", `/api/v1/work-items/${encodeURIComponent(id)}/confirm_outcome`, params);
     }
+    async previewWorkItemRepair(id, params) {
+        return this.request("POST", `/api/v1/work-items/${encodeURIComponent(id)}/repair_preview`, params);
+    }
+    async applyWorkItemRepair(id, params) {
+        return this.request("POST", `/api/v1/work-items/${encodeURIComponent(id)}/repair`, params);
+    }
+    async undoWorkItemRepair(id, params) {
+        return this.request("POST", `/api/v1/work-items/${encodeURIComponent(id)}/undo_repair`, params);
+    }
+    async previewWorkItemBulkOperation(params) {
+        return this.request("POST", "/api/v1/work-items/bulk_preview", params);
+    }
+    async applyWorkItemBulkOperation(id) {
+        return this.request("POST", `/api/v1/work-items/bulk_apply?id=${encodeURIComponent(id)}`);
+    }
+    async createOutcomeProposal(params) {
+        return this.request("POST", "/api/v1/outcome_proposals", params);
+    }
+    async approveOutcomeProposal(id) {
+        return this.request("POST", `/api/v1/outcome_proposals/${encodeURIComponent(id)}/approve`);
+    }
+    async createOutcomeAlias(params) {
+        return this.request("POST", "/api/v1/outcome-governance/aliases", params);
+    }
+    async mergeOutcomes(params) {
+        return this.request("POST", "/api/v1/outcome-governance/merge", params);
+    }
+    async listInferenceFeedback(options) {
+        const params = new URLSearchParams();
+        if (options?.limit)
+            params.set("limit", String(options.limit));
+        if (options?.offset)
+            params.set("offset", String(options.offset));
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/inference/feedback${qs ? `?${qs}` : ""}`);
+    }
+    async createInferenceFeedback(params) {
+        return this.request("POST", "/api/v1/inference/feedback", params);
+    }
     // --- Initiatives ---
     async listInitiatives(options) {
         const params = new URLSearchParams();
@@ -380,7 +419,13 @@ class TuningEnginesClient {
         return this.request("GET", `/api/v1/runtime_interventions${qs ? `?${qs}` : ""}`);
     }
     async createRuntimeIntervention(runId, params) {
-        return this.request("POST", `/api/v1/traces/${encodeURIComponent(runId)}/interventions`, params);
+        return this.request("POST", "/api/v1/runtime_interventions", {
+            run_id: runId,
+            ...params,
+        });
+    }
+    async getRuntimeIntervention(id) {
+        return this.request("GET", `/api/v1/runtime_interventions/${encodeURIComponent(id)}`);
     }
     async ackRuntimeIntervention(id, metadata) {
         return this.request("POST", `/api/v1/runtime_interventions/${encodeURIComponent(id)}/ack`, metadata ? { metadata } : undefined);
@@ -412,6 +457,9 @@ class TuningEnginesClient {
     async upsertRuntimeStateReference(params) {
         return this.request("POST", "/api/v1/runtime_state_references", params);
     }
+    async getRuntimeStateReference(id) {
+        return this.request("GET", `/api/v1/runtime_state_references/${encodeURIComponent(id)}`);
+    }
     // --- Registry sync ---
     async dryRunRegistrySync(manifest) {
         return this.request("POST", "/api/v1/registry_syncs/dry_run", { manifest });
@@ -421,6 +469,70 @@ class TuningEnginesClient {
     }
     async getRegistrySync(id) {
         return this.request("GET", `/api/v1/registry_syncs/${encodeURIComponent(id)}`);
+    }
+    // --- Compliance automation ---
+    async listComplianceRisks(options) {
+        const params = new URLSearchParams();
+        if (options?.status)
+            params.set("status", options.status);
+        if (options?.category)
+            params.set("category", options.category);
+        if (options?.limit)
+            params.set("limit", String(options.limit));
+        if (options?.offset)
+            params.set("offset", String(options.offset));
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/compliance/risks${qs ? `?${qs}` : ""}`);
+    }
+    async getComplianceRisk(id) {
+        return this.request("GET", `/api/v1/compliance/risks/${encodeURIComponent(id)}`);
+    }
+    async createComplianceRisk(params) {
+        return this.request("POST", "/api/v1/compliance/risks", params);
+    }
+    async updateComplianceRisk(id, params) {
+        return this.request("PATCH", `/api/v1/compliance/risks/${encodeURIComponent(id)}`, params);
+    }
+    async assessComplianceRisk(id, params) {
+        return this.request("POST", `/api/v1/compliance/risks/${encodeURIComponent(id)}/assess`, params);
+    }
+    async mapComplianceRiskControl(id, params) {
+        return this.request("POST", `/api/v1/compliance/risks/${encodeURIComponent(id)}/map_control`, params);
+    }
+    async addComplianceRiskSubject(id, subject) {
+        return this.request("POST", `/api/v1/compliance/risks/${encodeURIComponent(id)}/add_subject`, { subject });
+    }
+    async removeComplianceRiskSubject(id, subjectId) {
+        return this.request("DELETE", `/api/v1/compliance/risks/${encodeURIComponent(id)}/remove_subject`, { subject_id: subjectId });
+    }
+    async createComplianceSourceRun(params) {
+        return this.request("POST", "/api/v1/compliance/test-source-runs", params);
+    }
+    async getComplianceSourceRun(id) {
+        return this.request("GET", `/api/v1/compliance/test-source-runs/${encodeURIComponent(id)}`);
+    }
+    async submitComplianceSourceResults(id, params) {
+        return this.request("POST", `/api/v1/compliance/test-source-runs/${encodeURIComponent(id)}/results`, params);
+    }
+    async completeComplianceSourceRun(id, completeness) {
+        return this.request("POST", `/api/v1/compliance/test-source-runs/${encodeURIComponent(id)}/complete`, {
+            completeness,
+        });
+    }
+    async validateCompliance(params) {
+        return this.request("POST", "/api/v1/compliance/validate", params);
+    }
+    async rewriteCompliance(params) {
+        return this.request("POST", "/api/v1/compliance/rewrite", params);
+    }
+    async getComplianceEvidence(id) {
+        return this.request("GET", `/api/v1/compliance/evidence/${encodeURIComponent(id)}`);
+    }
+    async createComplianceCertification(params) {
+        return this.request("POST", "/api/v1/compliance/certifications", params);
+    }
+    async getComplianceCertification(id) {
+        return this.request("GET", `/api/v1/compliance/certifications/${encodeURIComponent(id)}`);
     }
     // --- Bulk imports ---
     async listBulkImports(options) {
@@ -581,6 +693,15 @@ class TuningEnginesClient {
     async updateInferenceCaptureConfig(params) {
         return this.request("PATCH", "/api/v1/tenant/inference_capture", params);
     }
+    async flushInferenceCapture() {
+        return this.request("POST", "/api/v1/tenant/inference_capture/flush");
+    }
+    async retryTenantResourceSync(resource, id) {
+        return this.request("POST", `/api/v1/tenant/${encodeURIComponent(resource)}/${encodeURIComponent(id)}/retry_sync`);
+    }
+    async verifyTenantResource(resource, id) {
+        return this.request("POST", `/api/v1/tenant/${encodeURIComponent(resource)}/${encodeURIComponent(id)}/verify`);
+    }
     async listMcpTools(serverId, options) {
         const params = new URLSearchParams();
         if (options?.limit)
@@ -607,6 +728,17 @@ class TuningEnginesClient {
     }
     async toggleMcpTool(serverId, toolId) {
         return this.request("POST", `/api/v1/tenant/mcp_servers/${encodeURIComponent(serverId)}/tools/${encodeURIComponent(toolId)}/toggle`);
+    }
+    async listMcpTemplates() {
+        return this.request("GET", "/api/v1/mcp_templates");
+    }
+    async getMcpTemplate(id) {
+        return this.request("GET", `/api/v1/mcp_templates/${encodeURIComponent(id)}`);
+    }
+    async installMcpTemplate(id, secretReferenceId) {
+        return this.request("POST", `/api/v1/mcp_templates/${encodeURIComponent(id)}/install`, {
+            secret_reference_id: secretReferenceId,
+        });
     }
     // --- Device Auth (unauthenticated) ---
     static async createDeviceSession(apiUrl) {

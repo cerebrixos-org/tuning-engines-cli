@@ -440,6 +440,54 @@ export class TuningEnginesClient {
     return this.request("POST", `/api/v1/work-items/${encodeURIComponent(id)}/confirm_outcome`, params);
   }
 
+  async previewWorkItemRepair(id: string, params: Record<string, any>): Promise<any> {
+    return this.request("POST", `/api/v1/work-items/${encodeURIComponent(id)}/repair_preview`, params);
+  }
+
+  async applyWorkItemRepair(id: string, params: Record<string, any>): Promise<any> {
+    return this.request("POST", `/api/v1/work-items/${encodeURIComponent(id)}/repair`, params);
+  }
+
+  async undoWorkItemRepair(id: string, params: Record<string, any>): Promise<any> {
+    return this.request("POST", `/api/v1/work-items/${encodeURIComponent(id)}/undo_repair`, params);
+  }
+
+  async previewWorkItemBulkOperation(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/work-items/bulk_preview", params);
+  }
+
+  async applyWorkItemBulkOperation(id: string): Promise<any> {
+    return this.request("POST", `/api/v1/work-items/bulk_apply?id=${encodeURIComponent(id)}`);
+  }
+
+  async createOutcomeProposal(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/outcome_proposals", params);
+  }
+
+  async approveOutcomeProposal(id: string): Promise<any> {
+    return this.request("POST", `/api/v1/outcome_proposals/${encodeURIComponent(id)}/approve`);
+  }
+
+  async createOutcomeAlias(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/outcome-governance/aliases", params);
+  }
+
+  async mergeOutcomes(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/outcome-governance/merge", params);
+  }
+
+  async listInferenceFeedback(options?: { limit?: number; offset?: number }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/inference/feedback${qs ? `?${qs}` : ""}`);
+  }
+
+  async createInferenceFeedback(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/inference/feedback", params);
+  }
+
   // --- Initiatives ---
 
   async listInitiatives(options?: { limit?: number; offset?: number }): Promise<any> {
@@ -536,7 +584,14 @@ export class TuningEnginesClient {
       request_context?: Record<string, any>;
     }
   ): Promise<any> {
-    return this.request("POST", `/api/v1/traces/${encodeURIComponent(runId)}/interventions`, params);
+    return this.request("POST", "/api/v1/runtime_interventions", {
+      run_id: runId,
+      ...params,
+    });
+  }
+
+  async getRuntimeIntervention(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/runtime_interventions/${encodeURIComponent(id)}`);
   }
 
   async ackRuntimeIntervention(id: string, metadata?: Record<string, any>): Promise<any> {
@@ -576,6 +631,10 @@ export class TuningEnginesClient {
     return this.request("POST", "/api/v1/runtime_state_references", params);
   }
 
+  async getRuntimeStateReference(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/runtime_state_references/${encodeURIComponent(id)}`);
+  }
+
   // --- Registry sync ---
 
   async dryRunRegistrySync(manifest: Record<string, any>): Promise<any> {
@@ -588,6 +647,93 @@ export class TuningEnginesClient {
 
   async getRegistrySync(id: string): Promise<any> {
     return this.request("GET", `/api/v1/registry_syncs/${encodeURIComponent(id)}`);
+  }
+
+  // --- Compliance automation ---
+
+  async listComplianceRisks(options?: {
+    status?: string;
+    category?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.status) params.set("status", options.status);
+    if (options?.category) params.set("category", options.category);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/compliance/risks${qs ? `?${qs}` : ""}`);
+  }
+
+  async getComplianceRisk(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/compliance/risks/${encodeURIComponent(id)}`);
+  }
+
+  async createComplianceRisk(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/compliance/risks", params);
+  }
+
+  async updateComplianceRisk(id: string, params: Record<string, any>): Promise<any> {
+    return this.request("PATCH", `/api/v1/compliance/risks/${encodeURIComponent(id)}`, params);
+  }
+
+  async assessComplianceRisk(id: string, params: Record<string, any>): Promise<any> {
+    return this.request("POST", `/api/v1/compliance/risks/${encodeURIComponent(id)}/assess`, params);
+  }
+
+  async mapComplianceRiskControl(id: string, params: Record<string, any>): Promise<any> {
+    return this.request("POST", `/api/v1/compliance/risks/${encodeURIComponent(id)}/map_control`, params);
+  }
+
+  async addComplianceRiskSubject(id: string, subject: string): Promise<any> {
+    return this.request("POST", `/api/v1/compliance/risks/${encodeURIComponent(id)}/add_subject`, { subject });
+  }
+
+  async removeComplianceRiskSubject(id: string, subjectId: string): Promise<any> {
+    return this.request(
+      "DELETE",
+      `/api/v1/compliance/risks/${encodeURIComponent(id)}/remove_subject`,
+      { subject_id: subjectId }
+    );
+  }
+
+  async createComplianceSourceRun(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/compliance/test-source-runs", params);
+  }
+
+  async getComplianceSourceRun(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/compliance/test-source-runs/${encodeURIComponent(id)}`);
+  }
+
+  async submitComplianceSourceResults(id: string, params: Record<string, any>): Promise<any> {
+    return this.request("POST", `/api/v1/compliance/test-source-runs/${encodeURIComponent(id)}/results`, params);
+  }
+
+  async completeComplianceSourceRun(id: string, completeness: string): Promise<any> {
+    return this.request("POST", `/api/v1/compliance/test-source-runs/${encodeURIComponent(id)}/complete`, {
+      completeness,
+    });
+  }
+
+  async validateCompliance(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/compliance/validate", params);
+  }
+
+  async rewriteCompliance(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/compliance/rewrite", params);
+  }
+
+  async getComplianceEvidence(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/compliance/evidence/${encodeURIComponent(id)}`);
+  }
+
+  async createComplianceCertification(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/compliance/certifications", params);
+  }
+
+  async getComplianceCertification(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/compliance/certifications/${encodeURIComponent(id)}`);
   }
 
   // --- Bulk imports ---
@@ -784,6 +930,24 @@ export class TuningEnginesClient {
     return this.request("PATCH", "/api/v1/tenant/inference_capture", params);
   }
 
+  async flushInferenceCapture(): Promise<any> {
+    return this.request("POST", "/api/v1/tenant/inference_capture/flush");
+  }
+
+  async retryTenantResourceSync(resource: string, id: string): Promise<any> {
+    return this.request(
+      "POST",
+      `/api/v1/tenant/${encodeURIComponent(resource)}/${encodeURIComponent(id)}/retry_sync`
+    );
+  }
+
+  async verifyTenantResource(resource: string, id: string): Promise<any> {
+    return this.request(
+      "POST",
+      `/api/v1/tenant/${encodeURIComponent(resource)}/${encodeURIComponent(id)}/verify`
+    );
+  }
+
   async listMcpTools(serverId: string, options?: { limit?: number; offset?: number }): Promise<any> {
     const params = new URLSearchParams();
     if (options?.limit) params.set("limit", String(options.limit));
@@ -813,6 +977,20 @@ export class TuningEnginesClient {
 
   async toggleMcpTool(serverId: string, toolId: string): Promise<any> {
     return this.request("POST", `/api/v1/tenant/mcp_servers/${encodeURIComponent(serverId)}/tools/${encodeURIComponent(toolId)}/toggle`);
+  }
+
+  async listMcpTemplates(): Promise<any> {
+    return this.request("GET", "/api/v1/mcp_templates");
+  }
+
+  async getMcpTemplate(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/mcp_templates/${encodeURIComponent(id)}`);
+  }
+
+  async installMcpTemplate(id: string, secretReferenceId?: string): Promise<any> {
+    return this.request("POST", `/api/v1/mcp_templates/${encodeURIComponent(id)}/install`, {
+      secret_reference_id: secretReferenceId,
+    });
   }
 
   // --- Device Auth (unauthenticated) ---

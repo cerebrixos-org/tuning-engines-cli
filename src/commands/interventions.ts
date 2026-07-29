@@ -36,6 +36,19 @@ export function registerInterventionCommands(
     });
 
   interventions
+    .command("show <id>")
+    .description("Show one runtime intervention request")
+    .option("--json", "Output as JSON")
+    .action(async (id: string, opts) => {
+      try {
+        printResult(await getClient().getRuntimeIntervention(id), opts.json);
+      } catch (err: any) {
+        console.error(err.message);
+        process.exit(1);
+      }
+    });
+
+  interventions
     .command("request <run-id>")
     .description("Create a runtime intervention request as a tenant owner/admin")
     .requiredOption("--kind <kind>", "pause, resume, cancel, or replay")

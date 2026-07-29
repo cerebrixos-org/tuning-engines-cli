@@ -67,6 +67,19 @@ function registerStateCommands(program, getClient) {
         }
     });
     state
+        .command("show <id>")
+        .description("Show one runtime state or memory reference")
+        .option("--json", "Output as JSON")
+        .action(async (id, opts) => {
+        try {
+            printResult(await getClient().getRuntimeStateReference(id), opts.json);
+        }
+        catch (err) {
+            console.error(err.message);
+            process.exit(1);
+        }
+    });
+    state
         .command("upsert")
         .description("Create or update a safe pointer to external runtime state")
         .requiredOption("--type <type>", "langgraph_checkpoint, temporal_workflow, vector_namespace, memory_record, external_context")

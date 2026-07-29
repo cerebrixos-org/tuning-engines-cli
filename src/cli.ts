@@ -35,6 +35,9 @@ import { registerGoalCommands } from "./commands/goal";
 import { registerWorkSessionCommands } from "./commands/work-sessions";
 import { registerInitiativeCommands } from "./commands/initiatives";
 import { registerUserModelCommands } from "./commands/user-models";
+import { registerSkillCommands } from "./commands/skills";
+import { registerComplianceCommands } from "./commands/compliance";
+import { registerFeedbackCommands } from "./commands/feedback";
 
 const program = new Command();
 
@@ -63,6 +66,9 @@ registerDatasetCommands(program, getClient);
 registerEvaluationCommands(program, getClient);
 registerInferenceCommands(program, getClient);
 registerAgentCommands(program, getClient);
+registerSkillCommands(program, getClient);
+registerComplianceCommands(program, getClient);
+registerFeedbackCommands(program, getClient);
 registerTenantCommands(program, getClient);
 registerApprovalCommands(program, getClient);
 registerTraceCommands(program, getClient);

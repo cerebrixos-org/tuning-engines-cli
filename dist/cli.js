@@ -69,6 +69,9 @@ const goal_1 = require("./commands/goal");
 const work_sessions_1 = require("./commands/work-sessions");
 const initiatives_1 = require("./commands/initiatives");
 const user_models_1 = require("./commands/user-models");
+const skills_1 = require("./commands/skills");
+const compliance_1 = require("./commands/compliance");
+const feedback_1 = require("./commands/feedback");
 const program = new commander_1.Command();
 program
     .name("te")
@@ -93,6 +96,9 @@ const getClient = () => {
 (0, evaluations_1.registerEvaluationCommands)(program, getClient);
 (0, inference_1.registerInferenceCommands)(program, getClient);
 (0, agents_1.registerAgentCommands)(program, getClient);
+(0, skills_1.registerSkillCommands)(program, getClient);
+(0, compliance_1.registerComplianceCommands)(program, getClient);
+(0, feedback_1.registerFeedbackCommands)(program, getClient);
 (0, tenant_1.registerTenantCommands)(program, getClient);
 (0, approvals_1.registerApprovalCommands)(program, getClient);
 (0, traces_1.registerTraceCommands)(program, getClient);

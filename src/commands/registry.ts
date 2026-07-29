@@ -49,6 +49,19 @@ export function registerRegistryCommands(
         process.exit(1);
       }
     });
+
+  registry
+    .command("show <id>")
+    .description("Show the result of an applied registry sync")
+    .option("--json", "Output as JSON")
+    .action(async (id: string, opts) => {
+      try {
+        printResult(await getClient().getRegistrySync(id), opts.json);
+      } catch (err: any) {
+        console.error(err.message);
+        process.exit(1);
+      }
+    });
 }
 
 function readManifest(filePath: string): Record<string, any> {

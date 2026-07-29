@@ -429,6 +429,10 @@ patterns.
 | `te inference usage` | Show inference API usage stats |
 | `te inference jwt` | Get a JWT for direct API access |
 | `te inference token` | Exchange an inference key (`sk-te-...`) for a short-lived inference JWT |
+| `te inference chat --data '<json>'` | Run an OpenAI-compatible chat completion |
+| `te inference responses --data '<json>'` | Run an OpenAI Responses request |
+| `te inference embeddings --data '<json>'` | Create embeddings |
+| `te inference messages --data '<json>'` | Run an Anthropic-compatible Messages request |
 
 ### Runtime Traces and Approvals
 
@@ -453,6 +457,12 @@ patterns.
 | `te approvals show <id>` | Show approval detail and retry metadata |
 | `te approvals approve <id>` | Approve a pending request |
 | `te approvals deny <id>` | Deny a pending request |
+| `te interventions list/show/request/ack/complete/fail` | Manage runtime pause, resume, cancel, and replay requests |
+| `te state list/show/upsert` | Manage safe external workflow-state and memory references |
+| `te registry sync --file tuning-registry.yml --dry-run/--apply` | Diff or apply agent, skill, and MCP registry manifests |
+| `te registry show <id>` | Inspect an applied registry sync |
+| `te work-sessions list/show/complete/confirm-outcome` | Inspect and update Work Sessions |
+| `te initiatives list/show/create/update` | Manage strategic initiative groupings |
 
 ### Orchestration Starters
 
@@ -476,6 +486,30 @@ patterns.
 |---------|-------------|
 | `te agents list` | List available agents |
 | `te agents show <id>` | Show agent details and capabilities |
+| `te agents message <name> --data '<json>'` | Send a governed A2A agent message |
+
+### Skills and MCP Execution
+
+| Command | Description |
+|---------|-------------|
+| `te skills list` | List skills visible to the inference identity |
+| `te skills prepare <name> --data '<json>'` | Prepare a governed skill |
+| `te skills invoke <name> --data '<json>'` | Invoke a governed skill |
+| `te mcp call --server <name> --tool <name> --arguments '<json>'` | Call an enabled governed MCP tool |
+| `te mcp rediscover <server-id>` | Refresh MCP tool discovery |
+| `te mcp tools list/enable/disable/toggle` | Administer discovered MCP tools |
+
+### Compliance Automation
+
+| Command | Description |
+|---------|-------------|
+| `te compliance validate --data '<json>'` | Validate bounded content against adopted rulepacks |
+| `te compliance rewrite --data '<json>'` | Produce and revalidate a safe rewrite |
+| `te compliance evidence <id>` | Inspect compliance evidence |
+| `te compliance risks list/show/create/update` | Manage the tenant risk register |
+| `te compliance risks assess/map-control/add-subject/remove-subject` | Operate the risk-to-control lifecycle |
+| `te compliance source-runs create/show/submit-results/complete` | Ingest normalized scanner or webhook results |
+| `te compliance certifications create/show` | Run and inspect compliance certification jobs |
 
 ### Tenant Admin Automation
 
@@ -587,6 +621,9 @@ All commands support `--json` for machine-readable output.
 | `inference_usage` | Inference API usage statistics |
 | `get_inference_jwt` | Get JWT token for direct API access |
 | `get_inference_token` | Exchange an inference key for a short-lived inference JWT |
+| `call_inference` | Call chat, Responses, embeddings, or Messages using the configured credential |
+| `send_agent_message` | Send a governed A2A agent message |
+| `list_skills` / `invoke_skill` | Discover, prepare, or invoke governed skills |
 
 ### Runtime, Policy, and Approvals
 
@@ -612,6 +649,16 @@ All commands support `--json` for machine-readable output.
 | `show_approval` | Show one approval request |
 | `approve_approval` | Approve a pending request |
 | `deny_approval` | Deny a pending request |
+| `list_runtime_interventions` / `show_runtime_intervention` | Inspect runtime control requests |
+| `create/ack/complete/fail_runtime_intervention` | Operate intervention lifecycle; requires `--enable-registry-writes` |
+| `list/show/upsert_runtime_state_reference` | Manage safe external state and memory pointers |
+| `registry_sync_dry_run` / `registry_sync_apply` / `show_registry_sync` | Diff, apply, and inspect registry manifests |
+| `list_work_sessions` / `show_work_session` / `complete_work_session` | Inspect and complete Work Sessions |
+| `list_initiatives` / `show_initiative` | Inspect initiative groupings |
+| `list_compliance_risks` / `show_compliance_risk` | Inspect the tenant risk register |
+| `validate_compliance` / `show_compliance_evidence` | Validate content and inspect evidence |
+| `create/submit/complete_compliance_source_run` | Ingest normalized external test results; writes require `--enable-registry-writes` |
+| `show_compliance_certification` | Inspect a certification run |
 
 ### Tenant Admin MCP Tools
 
@@ -657,6 +704,8 @@ proxy routes, inference-key creation, and raw secret-bearing mutation fields.
 |----------|-------------|
 | `TE_API_KEY` | API key (overrides config file) |
 | `TE_API_URL` | API URL (default: `https://app.tuningengines.com`) |
+| `TE_INFERENCE_KEY` | Optional `sk-te-*` key for direct model, agent, skill, and MCP calls |
+| `TE_INFERENCE_URL` | Inference base URL (default: `https://api.tuningengines.com/v1`) |
 
 Tenant management commands keep the configured `te_*` API token local and
 exchange it for a short-lived management JWT before calling the API. Inference

@@ -41,23 +41,31 @@ const RESOURCE_NAMES = [
     "model_deployments",
     "routing_profiles",
     "guardrail_policies",
+    "governance_profiles",
     "governance_policies",
     "mcp_servers",
     "tenant_agents",
     "tenant_skills",
+    "mcp_context_attachments",
     "credential_sources",
+    "secret_references",
+    "security_event_exports",
 ];
 const TYPED_RESOURCES = [
     { command: "keys", resource: "inference_keys", label: "inference keys", validates: false },
     { command: "roles", resource: "inference_roles", label: "inference roles", validates: false },
-    { command: "models", resource: "model_deployments", label: "model deployments", validates: false },
+    { command: "models", resource: "model_deployments", label: "model deployments", validates: true },
     { command: "routing-profiles", resource: "routing_profiles", label: "routing profiles", validates: false },
     { command: "guardrails", resource: "guardrail_policies", label: "guardrail policies", validates: true },
+    { command: "governance-profiles", resource: "governance_profiles", label: "governance profiles", validates: false },
     { command: "governance-policies", resource: "governance_policies", label: "AGT governance policies", validates: true },
     { command: "mcp-servers", resource: "mcp_servers", label: "MCP servers", validates: true },
     { command: "agents", resource: "tenant_agents", label: "tenant agents", validates: true },
     { command: "skills", resource: "tenant_skills", label: "tenant skills", validates: true },
+    { command: "context-attachments", resource: "mcp_context_attachments", label: "context and memory attachments", validates: false },
     { command: "credential-sources", resource: "credential_sources", label: "credential sources", validates: false },
+    { command: "secret-references", resource: "secret_references", label: "secret references", validates: false },
+    { command: "security-exports", resource: "security_event_exports", label: "security event exports", validates: false },
 ];
 function parseJsonObject(raw) {
     if (!raw)
@@ -327,6 +335,33 @@ function registerTenantCommands(program, getClient) {
             process.exit(1);
         }
     });
+    tenant.command("retry-sync <resource> <id>")
+        .description("Retry model, agent, skill, or MCP synchronization")
+        .option("--json", "Output as JSON")
+        .action(async (resource, id, opts) => {
+        try {
+            printResult(await getClient().retryTenantResourceSync(resource, id), opts.json);
+        }
+        catch (err) {
+            console.error(err.message);
+            process.exit(1);
+        }
+    });
+    tenant.command("verify <resource> <id>")
+        .description("Verify a credential source or secret reference using server-side vault access")
+        .option("--json", "Output as JSON")
+        .action(async (resource, id, opts) => {
+        try {
+            if (!["credential_sources", "secret_references"].includes(resource)) {
+                throw new Error("verify supports credential_sources and secret_references only");
+            }
+            printResult(await getClient().verifyTenantResource(resource, id), opts.json);
+        }
+        catch (err) {
+            console.error(err.message);
+            process.exit(1);
+        }
+    });
     registerTypedResourceCommands(tenant, getClient);
     const team = tenant.command("team").description("Manage tenant members and invitations");
     team
@@ -474,6 +509,19 @@ function registerTenantCommands(program, getClient) {
         try {
             const result = await getClient().updateInferenceCaptureConfig(parseJsonObject(opts.data));
             printResult(result, opts.json);
+        }
+        catch (err) {
+            console.error(err.message);
+            process.exit(1);
+        }
+    });
+    capture
+        .command("flush")
+        .description("Queue pending and failed captures for delivery")
+        .option("--json", "Output as JSON")
+        .action(async (opts) => {
+        try {
+            printResult(await getClient().flushInferenceCapture(), opts.json);
         }
         catch (err) {
             console.error(err.message);

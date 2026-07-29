@@ -34,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerInferenceCommands = registerInferenceCommands;
+const inference_request_1 = require("../inference_request");
 const output = __importStar(require("../output"));
 function printResult(result) {
     output.json(result);
@@ -107,6 +108,36 @@ function registerInferenceCommands(program, getClient) {
         .action(async () => {
         try {
             printResult(await getClient().getInferenceToken());
+        }
+        catch (err) {
+            console.error(err.message);
+            process.exit(1);
+        }
+    });
+    registerInferenceCall(inference, "chat", "/chat/completions", "Run an OpenAI-compatible chat completion", getClient);
+    registerInferenceCall(inference, "responses", "/responses", "Run an OpenAI Responses API request", getClient);
+    registerInferenceCall(inference, "embeddings", "/embeddings", "Create embeddings", getClient);
+    registerInferenceCall(inference, "messages", "/messages", "Run an Anthropic-compatible Messages request", getClient);
+}
+function registerInferenceCall(inference, command, endpoint, description, getClient) {
+    inference
+        .command(command)
+        .description(description)
+        .requiredOption("--data <json>", "Request payload JSON")
+        .option("--key <key>", "Inference key; defaults to TE_INFERENCE_KEY or a short-lived JWT")
+        .option("--base-url <url>", "Inference base URL; defaults to TE_INFERENCE_URL")
+        .option("--stream", "Stream the raw response to stdout")
+        .option("--json", "Output as JSON")
+        .action(async (opts) => {
+        try {
+            const client = getClient();
+            const bearer = await (0, inference_request_1.resolveInferenceBearer)(client, opts.key);
+            const result = await (0, inference_request_1.callInference)(endpoint, (0, inference_request_1.parseJsonObject)(opts.data), bearer, {
+                baseUrl: opts.baseUrl,
+                stream: Boolean(opts.stream),
+            });
+            if (result !== undefined)
+                printResult(result);
         }
         catch (err) {
             console.error(err.message);

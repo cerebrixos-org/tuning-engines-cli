@@ -7,6 +7,7 @@ import {
 import { TuningEnginesClient } from "./client";
 import { getApiKey, getApiUrl } from "./config";
 import { CLI_VERSION } from "./version";
+import { callInference, resolveInferenceBearer } from "./inference_request";
 
 type ToolDefinition = {
   name: string;
@@ -20,11 +21,15 @@ const TENANT_RESOURCE_NAMES = [
   "model_deployments",
   "routing_profiles",
   "guardrail_policies",
+  "governance_profiles",
   "governance_policies",
   "mcp_servers",
   "tenant_agents",
   "tenant_skills",
+  "mcp_context_attachments",
   "credential_sources",
+  "secret_references",
+  "security_event_exports",
 ] as const;
 
 const MCP_BLOCKED_CREATE_RESOURCE_NAMES = new Set<string>(["inference_keys"]);
@@ -216,7 +221,369 @@ function runtimeAndGovernanceTools(allowRegistryWrites = false): ToolDefinition[
         required: ["payload"],
       },
     },
+    {
+      name: "list_runtime_interventions",
+      description: "List tenant-scoped pause, resume, cancel, and replay requests.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          run_id: { type: "string" },
+          status: { type: "string" },
+          kind: { type: "string", enum: ["pause", "resume", "cancel", "replay"] },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+      },
+    },
+    {
+      name: "show_runtime_intervention",
+      description: "Show one tenant-scoped runtime intervention.",
+      inputSchema: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+    {
+      name: "list_runtime_state_references",
+      description: "List safe pointers to external workflow state and memory. Memory content and secrets are never returned.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          run_id: { type: "string" },
+          reference_type: { type: "string" },
+          provider: { type: "string" },
+          resource_type: { type: "string" },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+      },
+    },
+    {
+      name: "show_runtime_state_reference",
+      description: "Show one safe external state or memory reference.",
+      inputSchema: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+    {
+      name: "show_registry_sync",
+      description: "Show one registry-manifest sync result.",
+      inputSchema: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+    {
+      name: "list_mcp_templates",
+      description: "List verified MCP marketplace templates.",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "show_mcp_template",
+      description: "Show setup and risk metadata for one MCP template.",
+      inputSchema: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+    {
+      name: "list_work_sessions",
+      description: "List tenant-scoped Work Sessions.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string" },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+      },
+    },
+    {
+      name: "show_work_session",
+      description: "Show one Work Session and its linked traces.",
+      inputSchema: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+    {
+      name: "list_inference_feedback",
+      description: "List redacted inference feedback metadata for the current scope.",
+      inputSchema: {
+        type: "object",
+        properties: { limit: { type: "number" }, offset: { type: "number" } },
+      },
+    },
+    {
+      name: "list_initiatives",
+      description: "List strategic initiatives that group Work Sessions.",
+      inputSchema: {
+        type: "object",
+        properties: { limit: { type: "number" }, offset: { type: "number" } },
+      },
+    },
+    {
+      name: "show_initiative",
+      description: "Show one strategic initiative.",
+      inputSchema: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+    {
+      name: "list_compliance_risks",
+      description: "List tenant compliance risks. Requires compliance reader access.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string" },
+          category: { type: "string" },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+      },
+    },
+    {
+      name: "show_compliance_risk",
+      description: "Show a compliance risk with resources, controls, findings, treatments, and assessments.",
+      inputSchema: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+    {
+      name: "validate_compliance",
+      description: "Evaluate bounded content against adopted compliance rulepacks without mutating policy configuration.",
+      inputSchema: {
+        type: "object",
+        properties: { data: { type: "object", additionalProperties: true } },
+        required: ["data"],
+      },
+    },
+    {
+      name: "show_compliance_evidence",
+      description: "Show one tenant-scoped compliance evidence decision.",
+      inputSchema: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+    {
+      name: "show_compliance_certification",
+      description: "Show one compliance certification run.",
+      inputSchema: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+    {
+      name: "registry_sync_dry_run",
+      description: "Validate and diff a secret-free registry manifest without mutation.",
+      inputSchema: {
+        type: "object",
+        properties: { manifest: { type: "object", additionalProperties: true } },
+        required: ["manifest"],
+      },
+    },
     ...(allowRegistryWrites ? [
+      {
+        name: "create_runtime_intervention",
+        description: "Request a pause, resume, cancel, or replay. Requires owner/admin access and --enable-registry-writes.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            run_id: { type: "string" },
+            kind: { type: "string", enum: ["pause", "resume", "cancel", "replay"] },
+            reason: { type: "string" },
+            target_event_id: { type: "string" },
+            metadata: { type: "object" },
+          },
+          required: ["run_id", "kind"],
+        },
+      },
+      ...["ack", "complete", "fail"].map((action) => ({
+        name: `${action}_runtime_intervention`,
+        description: `${action} a runtime intervention. Requires --enable-registry-writes.`,
+        inputSchema: {
+          type: "object",
+          properties: { id: { type: "string" }, metadata: { type: "object" } },
+          required: ["id"],
+        },
+      })),
+      {
+        name: "upsert_runtime_state_reference",
+        description: "Upsert a safe external state/memory pointer. Raw memory content and secrets are refused.",
+        inputSchema: {
+          type: "object",
+          properties: { data: { type: "object", additionalProperties: true } },
+          required: ["data"],
+        },
+      },
+      {
+        name: "registry_sync_apply",
+        description: "Apply a secret-free registry manifest. Requires --enable-registry-writes.",
+        inputSchema: {
+          type: "object",
+          properties: { manifest: { type: "object", additionalProperties: true } },
+          required: ["manifest"],
+        },
+      },
+      {
+        name: "install_mcp_template",
+        description: "Install a verified MCP template as a disabled server. Uses an existing secret_reference_id.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            secret_reference_id: { type: "string" },
+          },
+          required: ["id"],
+        },
+      },
+      {
+        name: "complete_work_session",
+        description: "Mark a Work Session completed. Requires --enable-registry-writes.",
+        inputSchema: {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        },
+      },
+      {
+        name: "preview_work_session_repair",
+        description: "Preview the exact and automatically correlated evidence affected by a repair.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            data: { type: "object", additionalProperties: true },
+          },
+          required: ["id", "data"],
+        },
+      },
+      {
+        name: "apply_work_session_repair",
+        description: "Apply a previously previewed Work Session repair.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            data: { type: "object", additionalProperties: true },
+          },
+          required: ["id", "data"],
+        },
+      },
+      {
+        name: "undo_work_session_repair",
+        description: "Undo a Work Session repair.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            repair_id: { type: "string" },
+            reason: { type: "string" },
+          },
+          required: ["id", "repair_id"],
+        },
+      },
+      {
+        name: "record_inference_feedback",
+        description: "Record bounded feedback linked by request_id/run_id. Secret-bearing payloads are refused.",
+        inputSchema: {
+          type: "object",
+          properties: { data: { type: "object", additionalProperties: true } },
+          required: ["data"],
+        },
+      },
+      {
+        name: "propose_outcome",
+        description: "Propose a governed outcome for admin review.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            key: { type: "string" },
+            name: { type: "string" },
+            description: { type: "string" },
+            work_item_id: { type: "string" },
+          },
+          required: ["key", "name"],
+        },
+      },
+      {
+        name: "create_compliance_source_run",
+        description: "Create an external compliance source run. Requires owner/admin access.",
+        inputSchema: {
+          type: "object",
+          properties: { data: { type: "object", additionalProperties: true } },
+          required: ["data"],
+        },
+      },
+      {
+        name: "submit_compliance_source_results",
+        description: "Submit normalized external compliance results. Raw cloud credentials are refused.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            data: { type: "object", additionalProperties: true },
+          },
+          required: ["id", "data"],
+        },
+      },
+      {
+        name: "complete_compliance_source_run",
+        description: "Finalize an external compliance source run.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            completeness: { type: "string", enum: ["complete", "partial", "truncated", "cancelled"] },
+          },
+          required: ["id", "completeness"],
+        },
+      },
+      {
+        name: "flush_inference_capture",
+        description: "Queue pending and failed request captures for delivery. Requires --enable-registry-writes.",
+        inputSchema: { type: "object", properties: {} },
+      },
+      {
+        name: "retry_tenant_resource_sync",
+        description: "Retry synchronization for a model, MCP server, agent, or skill.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            resource: {
+              type: "string",
+              enum: ["model_deployments", "mcp_servers", "tenant_agents", "tenant_skills"],
+            },
+            id: { type: "string" },
+          },
+          required: ["resource", "id"],
+        },
+      },
+      {
+        name: "verify_tenant_secret_reference",
+        description: "Verify a vault connection or secret reference server-side without returning the secret.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            resource: { type: "string", enum: ["credential_sources", "secret_references"] },
+            id: { type: "string" },
+          },
+          required: ["resource", "id"],
+        },
+      },
       {
         name: "record_outcome",
         description: "Record an outcome or goal success signal for a run. Requires --enable-registry-writes because it writes telemetry.",
@@ -441,12 +808,16 @@ function runtimeAndGovernanceTools(allowRegistryWrites = false): ToolDefinition[
     },
     {
       name: "tenant_resource_validate",
-      description: "Validate an unsaved guardrail or AGT governance policy without creating records. Requires tenant owner/admin API token.",
+      description: "Validate an unsaved model, MCP server, agent, skill, guardrail, or governance policy without creating records.",
       inputSchema: {
         type: "object",
         properties: {
-          resource: { type: "string", enum: ["guardrail_policies", "governance_policies"], description: "Policy resource name" },
-          data: { type: "object", additionalProperties: true, description: "Unsaved policy attributes plus optional sample_text/context." },
+          resource: {
+            type: "string",
+            enum: ["model_deployments", "mcp_servers", "tenant_agents", "tenant_skills", "guardrail_policies", "governance_policies"],
+            description: "Resource name",
+          },
+          data: { type: "object", additionalProperties: true, description: "Unsaved resource attributes plus optional sample_text/context." },
         },
         required: ["resource", "data"],
       },
@@ -570,6 +941,13 @@ async function fetchGatewayTools(getClient: () => TuningEnginesClient): Promise<
   } catch {
     return [];
   }
+}
+
+async function configuredInferenceBearer(getClient: () => TuningEnginesClient): Promise<string> {
+  const configured = getApiKey();
+  return configured.startsWith("sk-te-")
+    ? configured
+    : resolveInferenceBearer(getClient());
 }
 
 export async function startMcpServer(options: { enableRegistryWrites?: boolean } = {}): Promise<void> {
@@ -1131,6 +1509,51 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
           properties: {},
         },
       },
+      {
+        name: "call_inference",
+        description: "Call a governed model endpoint using the MCP server's configured tenant credential. Payloads containing secret fields are refused.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            endpoint: {
+              type: "string",
+              enum: ["chat/completions", "responses", "embeddings", "messages", "messages/count_tokens"],
+            },
+            data: { type: "object", additionalProperties: true },
+          },
+          required: ["endpoint", "data"],
+        },
+      },
+      {
+        name: "send_agent_message",
+        description: "Send a governed message to a registered A2A agent.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            agent_name: { type: "string" },
+            data: { type: "object", additionalProperties: true },
+          },
+          required: ["agent_name", "data"],
+        },
+      },
+      {
+        name: "list_skills",
+        description: "List skills available to the configured inference identity.",
+        inputSchema: { type: "object" as const, properties: {} },
+      },
+      {
+        name: "invoke_skill",
+        description: "Prepare or invoke a governed skill.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            skill_name: { type: "string" },
+            action: { type: "string", enum: ["prepare", "invoke"] },
+            data: { type: "object", additionalProperties: true },
+          },
+          required: ["skill_name", "action", "data"],
+        },
+      },
       ...runtimeAndGovernanceTools(allowRegistryWrites),
       // --- Agents ---
       {
@@ -1408,6 +1831,41 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
           result = await getClient().getInferenceToken();
           break;
 
+        case "call_inference": {
+          const data = parseDataObject(args?.data);
+          result = await callInference(
+            `/${String(args!.endpoint)}`,
+            data,
+            await configuredInferenceBearer(getClient)
+          );
+          break;
+        }
+
+        case "send_agent_message":
+          result = await callInference(
+            `/agents/${encodeURIComponent(String(args!.agent_name))}/message`,
+            parseDataObject(args?.data),
+            await configuredInferenceBearer(getClient)
+          );
+          break;
+
+        case "list_skills":
+          result = await callInference(
+            "/skills",
+            undefined,
+            await configuredInferenceBearer(getClient),
+            { method: "GET" }
+          );
+          break;
+
+        case "invoke_skill":
+          result = await callInference(
+            `/skills/${encodeURIComponent(String(args!.skill_name))}/${String(args!.action)}`,
+            parseDataObject(args?.data),
+            await configuredInferenceBearer(getClient)
+          );
+          break;
+
         case "list_traces":
           result = await getClient().listTraces({
             limit: args?.limit as number | undefined,
@@ -1445,6 +1903,243 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
 
         case "doctor_simulate":
           result = await getClient().doctorSimulate(args!.payload as Record<string, any>);
+          break;
+
+        case "list_runtime_interventions":
+          result = await getClient().listRuntimeInterventions({
+            runId: args?.run_id as string | undefined,
+            status: args?.status as string | undefined,
+            kind: args?.kind as string | undefined,
+            limit: args?.limit as number | undefined,
+            offset: args?.offset as number | undefined,
+          });
+          break;
+
+        case "show_runtime_intervention":
+          result = await getClient().getRuntimeIntervention(String(args!.id));
+          break;
+
+        case "create_runtime_intervention":
+          if (!allowRegistryWrites) throw new Error("Runtime writes are disabled. Start MCP with --enable-registry-writes.");
+          result = await getClient().createRuntimeIntervention(String(args!.run_id), {
+            kind: String(args!.kind),
+            reason: args?.reason as string | undefined,
+            target_event_id: args?.target_event_id as string | undefined,
+            metadata: args?.metadata as Record<string, any> | undefined,
+          });
+          break;
+
+        case "ack_runtime_intervention":
+        case "complete_runtime_intervention":
+        case "fail_runtime_intervention": {
+          if (!allowRegistryWrites) throw new Error("Runtime writes are disabled. Start MCP with --enable-registry-writes.");
+          const id = String(args!.id);
+          const metadata = args?.metadata as Record<string, any> | undefined;
+          result = name === "ack_runtime_intervention"
+            ? await getClient().ackRuntimeIntervention(id, metadata)
+            : name === "complete_runtime_intervention"
+              ? await getClient().completeRuntimeIntervention(id, metadata)
+              : await getClient().failRuntimeIntervention(id, metadata);
+          break;
+        }
+
+        case "list_runtime_state_references":
+          result = await getClient().listRuntimeStateReferences({
+            runId: args?.run_id as string | undefined,
+            referenceType: args?.reference_type as string | undefined,
+            provider: args?.provider as string | undefined,
+            resourceType: args?.resource_type as string | undefined,
+            limit: args?.limit as number | undefined,
+            offset: args?.offset as number | undefined,
+          });
+          break;
+
+        case "show_runtime_state_reference":
+          result = await getClient().getRuntimeStateReference(String(args!.id));
+          break;
+
+        case "upsert_runtime_state_reference": {
+          if (!allowRegistryWrites) throw new Error("Runtime writes are disabled. Start MCP with --enable-registry-writes.");
+          const data = parseDataObject(args?.data);
+          if (hasBlockedSecretField(data)) throw new Error("State references may not contain secrets.");
+          result = await getClient().upsertRuntimeStateReference(data);
+          break;
+        }
+
+        case "registry_sync_dry_run": {
+          const manifest = parseDataObject(args?.manifest, "manifest");
+          if (hasBlockedSecretField(manifest)) throw new Error("Registry manifests may not contain secrets.");
+          result = await getClient().dryRunRegistrySync(manifest);
+          break;
+        }
+
+        case "registry_sync_apply": {
+          if (!allowRegistryWrites) throw new Error("Registry writes are disabled. Start MCP with --enable-registry-writes.");
+          const manifest = parseDataObject(args?.manifest, "manifest");
+          if (hasBlockedSecretField(manifest)) throw new Error("Registry manifests may not contain secrets.");
+          result = await getClient().applyRegistrySync(manifest);
+          break;
+        }
+
+        case "show_registry_sync":
+          result = await getClient().getRegistrySync(String(args!.id));
+          break;
+
+        case "list_mcp_templates":
+          result = await getClient().listMcpTemplates();
+          break;
+
+        case "show_mcp_template":
+          result = await getClient().getMcpTemplate(String(args!.id));
+          break;
+
+        case "install_mcp_template":
+          if (!allowRegistryWrites) throw new Error("Registry writes are disabled. Start MCP with --enable-registry-writes.");
+          result = await getClient().installMcpTemplate(
+            String(args!.id),
+            args?.secret_reference_id as string | undefined
+          );
+          break;
+
+        case "list_work_sessions":
+          result = await getClient().listWorkItems({
+            status: args?.status as string | undefined,
+            limit: args?.limit as number | undefined,
+            offset: args?.offset as number | undefined,
+          });
+          break;
+
+        case "show_work_session":
+          result = await getClient().getWorkItem(String(args!.id));
+          break;
+
+        case "complete_work_session":
+          if (!allowRegistryWrites) throw new Error("Work Session writes are disabled. Start MCP with --enable-registry-writes.");
+          result = await getClient().completeWorkItem(String(args!.id));
+          break;
+
+        case "preview_work_session_repair":
+          if (!allowRegistryWrites) throw new Error("Work Session writes are disabled. Start MCP with --enable-registry-writes.");
+          result = await getClient().previewWorkItemRepair(
+            String(args!.id),
+            parseDataObject(args?.data)
+          );
+          break;
+
+        case "apply_work_session_repair":
+          if (!allowRegistryWrites) throw new Error("Work Session writes are disabled. Start MCP with --enable-registry-writes.");
+          result = await getClient().applyWorkItemRepair(
+            String(args!.id),
+            parseDataObject(args?.data)
+          );
+          break;
+
+        case "undo_work_session_repair":
+          if (!allowRegistryWrites) throw new Error("Work Session writes are disabled. Start MCP with --enable-registry-writes.");
+          result = await getClient().undoWorkItemRepair(String(args!.id), {
+            repair_id: String(args!.repair_id),
+            reason: args?.reason,
+          });
+          break;
+
+        case "list_inference_feedback":
+          result = await getClient().listInferenceFeedback({
+            limit: args?.limit as number | undefined,
+            offset: args?.offset as number | undefined,
+          });
+          break;
+
+        case "record_inference_feedback":
+          if (!allowRegistryWrites) throw new Error("Feedback writes are disabled. Start MCP with --enable-registry-writes.");
+          result = await getClient().createInferenceFeedback(parseDataObject(args?.data));
+          break;
+
+        case "propose_outcome":
+          if (!allowRegistryWrites) throw new Error("Outcome writes are disabled. Start MCP with --enable-registry-writes.");
+          result = await getClient().createOutcomeProposal({
+            key: args!.key,
+            name: args!.name,
+            description: args?.description,
+            work_item_id: args?.work_item_id,
+          });
+          break;
+
+        case "list_initiatives":
+          result = await getClient().listInitiatives({
+            limit: args?.limit as number | undefined,
+            offset: args?.offset as number | undefined,
+          });
+          break;
+
+        case "show_initiative":
+          result = await getClient().getInitiative(String(args!.id));
+          break;
+
+        case "list_compliance_risks":
+          result = await getClient().listComplianceRisks({
+            status: args?.status as string | undefined,
+            category: args?.category as string | undefined,
+            limit: args?.limit as number | undefined,
+            offset: args?.offset as number | undefined,
+          });
+          break;
+
+        case "show_compliance_risk":
+          result = await getClient().getComplianceRisk(String(args!.id));
+          break;
+
+        case "validate_compliance":
+          result = await getClient().validateCompliance(parseDataObject(args?.data));
+          break;
+
+        case "show_compliance_evidence":
+          result = await getClient().getComplianceEvidence(String(args!.id));
+          break;
+
+        case "show_compliance_certification":
+          result = await getClient().getComplianceCertification(String(args!.id));
+          break;
+
+        case "create_compliance_source_run":
+          if (!allowRegistryWrites) throw new Error("Compliance writes are disabled. Start MCP with --enable-registry-writes.");
+          result = await getClient().createComplianceSourceRun(parseDataObject(args?.data));
+          break;
+
+        case "submit_compliance_source_results":
+          if (!allowRegistryWrites) throw new Error("Compliance writes are disabled. Start MCP with --enable-registry-writes.");
+          result = await getClient().submitComplianceSourceResults(
+            String(args!.id),
+            parseDataObject(args?.data)
+          );
+          break;
+
+        case "complete_compliance_source_run":
+          if (!allowRegistryWrites) throw new Error("Compliance writes are disabled. Start MCP with --enable-registry-writes.");
+          result = await getClient().completeComplianceSourceRun(
+            String(args!.id),
+            String(args!.completeness)
+          );
+          break;
+
+        case "flush_inference_capture":
+          if (!allowRegistryWrites) throw new Error("Capture writes are disabled. Start MCP with --enable-registry-writes.");
+          result = await getClient().flushInferenceCapture();
+          break;
+
+        case "retry_tenant_resource_sync":
+          if (!allowRegistryWrites) throw new Error("Registry writes are disabled. Start MCP with --enable-registry-writes.");
+          result = await getClient().retryTenantResourceSync(
+            String(args!.resource),
+            String(args!.id)
+          );
+          break;
+
+        case "verify_tenant_secret_reference":
+          if (!allowRegistryWrites) throw new Error("Secret-reference verification is disabled. Start MCP with --enable-registry-writes.");
+          result = await getClient().verifyTenantResource(
+            String(args!.resource),
+            String(args!.id)
+          );
           break;
 
         case "record_outcome":
@@ -1593,8 +2288,15 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
 
         case "tenant_resource_validate": {
           const resource = assertTenantResourceName(args?.resource);
-          if (!["guardrail_policies", "governance_policies"].includes(resource)) {
-            throw new Error("tenant_resource_validate currently supports guardrail_policies and governance_policies.");
+          if (![
+            "model_deployments",
+            "mcp_servers",
+            "tenant_agents",
+            "tenant_skills",
+            "guardrail_policies",
+            "governance_policies",
+          ].includes(resource)) {
+            throw new Error("Validation is not available for this tenant resource.");
           }
           const data = parseDataObject(args?.data);
           if (hasBlockedSecretField(data)) {

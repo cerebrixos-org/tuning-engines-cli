@@ -195,6 +195,20 @@ export declare class TuningEnginesClient {
         result_status?: string;
         label?: string;
     }): Promise<any>;
+    previewWorkItemRepair(id: string, params: Record<string, any>): Promise<any>;
+    applyWorkItemRepair(id: string, params: Record<string, any>): Promise<any>;
+    undoWorkItemRepair(id: string, params: Record<string, any>): Promise<any>;
+    previewWorkItemBulkOperation(params: Record<string, any>): Promise<any>;
+    applyWorkItemBulkOperation(id: string): Promise<any>;
+    createOutcomeProposal(params: Record<string, any>): Promise<any>;
+    approveOutcomeProposal(id: string): Promise<any>;
+    createOutcomeAlias(params: Record<string, any>): Promise<any>;
+    mergeOutcomes(params: Record<string, any>): Promise<any>;
+    listInferenceFeedback(options?: {
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    createInferenceFeedback(params: Record<string, any>): Promise<any>;
     listInitiatives(options?: {
         limit?: number;
         offset?: number;
@@ -238,6 +252,7 @@ export declare class TuningEnginesClient {
         metadata?: Record<string, any>;
         request_context?: Record<string, any>;
     }): Promise<any>;
+    getRuntimeIntervention(id: string): Promise<any>;
     ackRuntimeIntervention(id: string, metadata?: Record<string, any>): Promise<any>;
     completeRuntimeIntervention(id: string, metadata?: Record<string, any>): Promise<any>;
     failRuntimeIntervention(id: string, metadata?: Record<string, any>): Promise<any>;
@@ -250,9 +265,32 @@ export declare class TuningEnginesClient {
         offset?: number;
     }): Promise<any>;
     upsertRuntimeStateReference(params: Record<string, any>): Promise<any>;
+    getRuntimeStateReference(id: string): Promise<any>;
     dryRunRegistrySync(manifest: Record<string, any>): Promise<any>;
     applyRegistrySync(manifest: Record<string, any>): Promise<any>;
     getRegistrySync(id: string): Promise<any>;
+    listComplianceRisks(options?: {
+        status?: string;
+        category?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getComplianceRisk(id: string): Promise<any>;
+    createComplianceRisk(params: Record<string, any>): Promise<any>;
+    updateComplianceRisk(id: string, params: Record<string, any>): Promise<any>;
+    assessComplianceRisk(id: string, params: Record<string, any>): Promise<any>;
+    mapComplianceRiskControl(id: string, params: Record<string, any>): Promise<any>;
+    addComplianceRiskSubject(id: string, subject: string): Promise<any>;
+    removeComplianceRiskSubject(id: string, subjectId: string): Promise<any>;
+    createComplianceSourceRun(params: Record<string, any>): Promise<any>;
+    getComplianceSourceRun(id: string): Promise<any>;
+    submitComplianceSourceResults(id: string, params: Record<string, any>): Promise<any>;
+    completeComplianceSourceRun(id: string, completeness: string): Promise<any>;
+    validateCompliance(params: Record<string, any>): Promise<any>;
+    rewriteCompliance(params: Record<string, any>): Promise<any>;
+    getComplianceEvidence(id: string): Promise<any>;
+    createComplianceCertification(params: Record<string, any>): Promise<any>;
+    getComplianceCertification(id: string): Promise<any>;
     listBulkImports(options?: {
         limit?: number;
         offset?: number;
@@ -322,6 +360,9 @@ export declare class TuningEnginesClient {
     updateTenantDomains(domains: string[]): Promise<any>;
     getInferenceCaptureConfig(): Promise<any>;
     updateInferenceCaptureConfig(params: Record<string, any>): Promise<any>;
+    flushInferenceCapture(): Promise<any>;
+    retryTenantResourceSync(resource: string, id: string): Promise<any>;
+    verifyTenantResource(resource: string, id: string): Promise<any>;
     listMcpTools(serverId: string, options?: {
         limit?: number;
         offset?: number;
@@ -333,6 +374,9 @@ export declare class TuningEnginesClient {
         enabled?: boolean;
     }): Promise<any>;
     toggleMcpTool(serverId: string, toolId: string): Promise<any>;
+    listMcpTemplates(): Promise<any>;
+    getMcpTemplate(id: string): Promise<any>;
+    installMcpTemplate(id: string, secretReferenceId?: string): Promise<any>;
     static createDeviceSession(apiUrl: string): Promise<{
         device_code: string;
         verification_url: string;

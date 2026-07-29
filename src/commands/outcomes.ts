@@ -134,4 +134,67 @@ export function registerOutcomeCommands(
         process.exit(1);
       }
     });
+
+  outcomes.command("propose")
+    .description("Propose a governed outcome for admin review")
+    .requiredOption("--key <key>")
+    .requiredOption("--name <name>")
+    .option("--description <text>")
+    .option("--work-session-id <id>")
+    .action(async (opts) => {
+      try {
+        output.json(await getClient().createOutcomeProposal({
+          key: opts.key,
+          name: opts.name,
+          description: opts.description,
+          work_item_id: opts.workSessionId,
+        }));
+      } catch (err: any) {
+        console.error(err.message);
+        process.exit(1);
+      }
+    });
+
+  outcomes.command("approve-proposal <id>")
+    .description("Approve an outcome proposal as a tenant admin")
+    .action(async (id: string) => {
+      try {
+        output.json(await getClient().approveOutcomeProposal(id));
+      } catch (err: any) {
+        console.error(err.message);
+        process.exit(1);
+      }
+    });
+
+  outcomes.command("alias")
+    .description("Create an alias for a canonical outcome")
+    .requiredOption("--outcome-id <id>")
+    .requiredOption("--key <key>")
+    .action(async (opts) => {
+      try {
+        output.json(await getClient().createOutcomeAlias({
+          inference_outcome_id: opts.outcomeId,
+          key: opts.key,
+        }));
+      } catch (err: any) {
+        console.error(err.message);
+        process.exit(1);
+      }
+    });
+
+  outcomes.command("merge")
+    .description("Merge one outcome into a canonical outcome")
+    .requiredOption("--source-id <id>")
+    .requiredOption("--target-id <id>")
+    .action(async (opts) => {
+      try {
+        output.json(await getClient().mergeOutcomes({
+          source_id: opts.sourceId,
+          target_id: opts.targetId,
+        }));
+      } catch (err: any) {
+        console.error(err.message);
+        process.exit(1);
+      }
+    });
 }

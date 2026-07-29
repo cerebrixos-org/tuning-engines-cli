@@ -1,6 +1,6 @@
 {
   "name": "tuningengines-cli",
-  "version": "0.4.31",
+  "version": "0.4.32",
   "description": "Tuning Engines CLI, MCP server, and Python agent runtime adapters for governed model, agent, skill, and MCP workflows. Fine-tune open-source LLMs, run inference, manage datasets/evaluations, and connect LangGraph or Temporal while Tuning Engines handles policy, audit, usage, and token economics.",
   "main": "dist/cli.js",
   "exports": {
@@ -20,7 +20,8 @@
     "start": "node dist/cli.js",
     "smoke:inference": "node scripts/smoke/inference-smoke.mjs",
     "test:guard": "node test_guard_claude_install.mjs && node test_guard_runtime_adapters.mjs",
-    "test:mcp": "node test_mcp_smoke.mjs"
+    "test:mcp": "node test_mcp_smoke.mjs && node test_mcp_write_surface.mjs",
+    "test:parity": "node test_client_parity.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

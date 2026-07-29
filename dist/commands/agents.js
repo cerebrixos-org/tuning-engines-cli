@@ -34,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerAgentCommands = registerAgentCommands;
+const inference_request_1 = require("../inference_request");
 const output = __importStar(require("../output"));
 function printResult(result) {
     output.json(result);
@@ -62,6 +63,23 @@ function registerAgentCommands(program, getClient) {
         .action(async (id) => {
         try {
             printResult(await getClient().getAgent(id));
+        }
+        catch (err) {
+            console.error(err.message);
+            process.exit(1);
+        }
+    });
+    agents
+        .command("message <name>")
+        .description("Send a governed message to a registered A2A agent")
+        .requiredOption("--data <json>", "Agent message request JSON")
+        .option("--key <key>", "Inference key; defaults to TE_INFERENCE_KEY or a short-lived JWT")
+        .option("--base-url <url>", "Inference base URL; defaults to TE_INFERENCE_URL")
+        .option("--json", "Output as JSON")
+        .action(async (name, opts) => {
+        try {
+            const bearer = await (0, inference_request_1.resolveInferenceBearer)(getClient(), opts.key);
+            printResult(await (0, inference_request_1.callInference)(`/agents/${encodeURIComponent(name)}/message`, (0, inference_request_1.parseJsonObject)(opts.data), bearer, { baseUrl: opts.baseUrl }));
         }
         catch (err) {
             console.error(err.message);

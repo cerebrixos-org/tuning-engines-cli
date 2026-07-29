@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { TuningEnginesClient } from "../client";
+import { callInference, parseJsonObject, resolveInferenceBearer } from "../inference_request";
 import * as output from "../output";
 
 function printResult(result: any, asJson: boolean): void {
@@ -21,6 +22,60 @@ export function registerMcpToolCommands(
     .action(async (serverId: string, opts) => {
       try {
         printResult(await getClient().rediscoverMcpServer(serverId), opts.json);
+      } catch (err: any) {
+        console.error(err.message);
+        process.exit(1);
+      }
+    });
+
+  mcp
+    .command("call")
+    .description("Call an enabled governed MCP tool through the inference gateway")
+    .requiredOption("--server <name>", "Registered MCP server name")
+    .requiredOption("--tool <name>", "Tool name")
+    .option("--arguments <json>", "Tool arguments JSON", "{}")
+    .option("--key <key>", "Inference key; defaults to TE_INFERENCE_KEY or a short-lived JWT")
+    .option("--base-url <url>", "Inference base URL; defaults to TE_INFERENCE_URL")
+    .option("--json", "Output as JSON")
+    .action(async (opts) => {
+      try {
+        const bearer = await resolveInferenceBearer(getClient(), opts.key);
+        printResult(await callInference("/mcp/tools/call", {
+          server_name: opts.server,
+          tool_name: opts.tool,
+          arguments: parseJsonObject(opts.arguments, "arguments"),
+        }, bearer, { baseUrl: opts.baseUrl }), opts.json);
+      } catch (err: any) {
+        console.error(err.message);
+        process.exit(1);
+      }
+    });
+
+  const templates = mcp.command("templates").description("Browse and install verified MCP templates");
+  templates.command("list")
+    .action(async () => {
+      try {
+        printResult(await getClient().listMcpTemplates(), true);
+      } catch (err: any) {
+        console.error(err.message);
+        process.exit(1);
+      }
+    });
+  templates.command("show <id>")
+    .action(async (id: string) => {
+      try {
+        printResult(await getClient().getMcpTemplate(id), true);
+      } catch (err: any) {
+        console.error(err.message);
+        process.exit(1);
+      }
+    });
+  templates.command("install <id>")
+    .description("Install a verified template as a disabled MCP server")
+    .option("--secret-reference-id <id>", "Existing tenant secret reference")
+    .action(async (id: string, opts) => {
+      try {
+        printResult(await getClient().installMcpTemplate(id, opts.secretReferenceId), true);
       } catch (err: any) {
         console.error(err.message);
         process.exit(1);
