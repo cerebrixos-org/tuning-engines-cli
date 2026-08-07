@@ -276,6 +276,48 @@ export declare class TuningEnginesClient {
     }): Promise<any>;
     upsertRuntimeStateReference(params: Record<string, any>): Promise<any>;
     getRuntimeStateReference(id: string): Promise<any>;
+    listAiSystemAssets(options?: {
+        assetType?: string;
+        sourceSystem?: string;
+        lifecycleState?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getAiSystemAsset(id: string): Promise<any>;
+    listEvidenceSets(options?: {
+        initiativeId?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getEvidenceSet(id: string): Promise<any>;
+    createEvidenceSet(params: {
+        initiative_id: string;
+        work_item_ids: string[];
+        name?: string;
+        filter_snapshot?: Record<string, any>;
+    }): Promise<any>;
+    listIntelligenceRuns(options?: {
+        runType?: string;
+        status?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getIntelligenceRun(id: string): Promise<any>;
+    createIntelligenceRun(params: {
+        initiative_id: string;
+        run_type: string;
+        evidence_set_id?: string;
+        parameters?: Record<string, any>;
+    }): Promise<any>;
+    listContextAssets(options?: {
+        contextType?: string;
+        status?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getContextAsset(id: string): Promise<any>;
+    createContextAsset(params: Record<string, any>): Promise<any>;
+    activateContextAsset(id: string, versionId: string): Promise<any>;
     dryRunRegistrySync(manifest: Record<string, any>): Promise<any>;
     applyRegistrySync(manifest: Record<string, any>): Promise<any>;
     getRegistrySync(id: string): Promise<any>;

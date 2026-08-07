@@ -17,6 +17,9 @@ Tuning Engines for the things it already does well:
 - Usage, request capture, auditability, and token economics
 - Client-side causal traces for LLM calls, MCP calls, LangGraph runs, and
   Temporal activities
+- Tenant-scoped AI-system asset inventory and reviewed topology reads
+- Immutable trajectory evidence sets and reproducible intelligence runs
+- Reviewed context-asset drafts with explicit, separately authorized activation
 
 For raw OpenAI-compatible clients such as OpenCode, direct Temporal Activities,
 and OpenAI SDK integrations, see
@@ -81,6 +84,37 @@ client.record_state_reference(
     runtime="langgraph",
 )
 ```
+
+Trajectory intelligence is intentionally split into reviewable stages:
+
+```python
+assets = client.list_ai_system_assets(asset_type="agent")
+evidence = client.freeze_evidence_set(
+    initiative_id="ini_...",
+    work_item_ids=["wis_...", "wis_..."],
+    name="Successful incident recoveries",
+)
+run = client.start_intelligence_run(
+    initiative_id="ini_...",
+    run_type="trajectory_comparison",
+    evidence_set_id=evidence["evidence_set"]["public_id"],
+)
+
+# Drafting and activation are deliberately separate administrative actions.
+draft = client.create_context_asset_draft({
+    "name": "Incident recovery procedure",
+    "context_type": "procedure",
+    "structured_units": [{"step": "Verify the affected service"}],
+})
+client.activate_context_asset(
+    draft["context_asset"]["public_id"],
+    version_id=draft["context_asset"]["versions"][0]["public_id"],
+)
+```
+
+The server rechecks tenant scope, role permissions, review state, and release
+gates. The SDK never stores raw prompts, memory content, credentials, or
+chain-of-thought in an asset or evidence-set helper.
 
 The LangGraph adapter exposes two executable resource classes:
 

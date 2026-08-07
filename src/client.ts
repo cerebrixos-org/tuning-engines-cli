@@ -648,6 +648,96 @@ export class TuningEnginesClient {
     return this.request("GET", `/api/v1/runtime_state_references/${encodeURIComponent(id)}`);
   }
 
+  // --- AI system assets and trajectory intelligence ---
+
+  async listAiSystemAssets(options?: {
+    assetType?: string;
+    sourceSystem?: string;
+    lifecycleState?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.assetType) params.set("asset_type", options.assetType);
+    if (options?.sourceSystem) params.set("source_system", options.sourceSystem);
+    if (options?.lifecycleState) params.set("lifecycle_state", options.lifecycleState);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/ai-system-assets${qs ? `?${qs}` : ""}`);
+  }
+
+  async getAiSystemAsset(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/ai-system-assets/${encodeURIComponent(id)}`);
+  }
+
+  async listEvidenceSets(options?: { initiativeId?: string; limit?: number; offset?: number }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.initiativeId) params.set("initiative_id", options.initiativeId);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/evidence-sets${qs ? `?${qs}` : ""}`);
+  }
+
+  async getEvidenceSet(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/evidence-sets/${encodeURIComponent(id)}`);
+  }
+
+  async createEvidenceSet(params: {
+    initiative_id: string;
+    work_item_ids: string[];
+    name?: string;
+    filter_snapshot?: Record<string, any>;
+  }): Promise<any> {
+    return this.request("POST", "/api/v1/evidence-sets", params);
+  }
+
+  async listIntelligenceRuns(options?: { runType?: string; status?: string; limit?: number; offset?: number }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.runType) params.set("run_type", options.runType);
+    if (options?.status) params.set("status", options.status);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/intelligence-runs${qs ? `?${qs}` : ""}`);
+  }
+
+  async getIntelligenceRun(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/intelligence-runs/${encodeURIComponent(id)}`);
+  }
+
+  async createIntelligenceRun(params: {
+    initiative_id: string;
+    run_type: string;
+    evidence_set_id?: string;
+    parameters?: Record<string, any>;
+  }): Promise<any> {
+    return this.request("POST", "/api/v1/intelligence-runs", params);
+  }
+
+  async listContextAssets(options?: { contextType?: string; status?: string; limit?: number; offset?: number }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.contextType) params.set("context_type", options.contextType);
+    if (options?.status) params.set("status", options.status);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/context-assets${qs ? `?${qs}` : ""}`);
+  }
+
+  async getContextAsset(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/context-assets/${encodeURIComponent(id)}`);
+  }
+
+  async createContextAsset(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/context-assets", params);
+  }
+
+  async activateContextAsset(id: string, versionId: string): Promise<any> {
+    return this.request("POST", `/api/v1/context-assets/${encodeURIComponent(id)}/activate`, { version_id: versionId });
+  }
+
   // --- Registry sync ---
 
   async dryRunRegistrySync(manifest: Record<string, any>): Promise<any> {

@@ -73,6 +73,8 @@ const skills_1 = require("./commands/skills");
 const compliance_1 = require("./commands/compliance");
 const feedback_1 = require("./commands/feedback");
 const context_1 = require("./commands/context");
+const assets_1 = require("./commands/assets");
+const trajectory_1 = require("./commands/trajectory");
 const program = new commander_1.Command();
 program
     .name("te")
@@ -101,6 +103,8 @@ const getClient = () => {
 (0, compliance_1.registerComplianceCommands)(program, getClient);
 (0, feedback_1.registerFeedbackCommands)(program, getClient);
 (0, context_1.registerContextCommands)(program, getClient);
+(0, assets_1.registerAssetCommands)(program, getClient);
+(0, trajectory_1.registerTrajectoryCommands)(program, getClient);
 (0, tenant_1.registerTenantCommands)(program, getClient);
 (0, approvals_1.registerApprovalCommands)(program, getClient);
 (0, traces_1.registerTraceCommands)(program, getClient);

@@ -463,6 +463,83 @@ class TuningEnginesClient {
     async getRuntimeStateReference(id) {
         return this.request("GET", `/api/v1/runtime_state_references/${encodeURIComponent(id)}`);
     }
+    // --- AI system assets and trajectory intelligence ---
+    async listAiSystemAssets(options) {
+        const params = new URLSearchParams();
+        if (options?.assetType)
+            params.set("asset_type", options.assetType);
+        if (options?.sourceSystem)
+            params.set("source_system", options.sourceSystem);
+        if (options?.lifecycleState)
+            params.set("lifecycle_state", options.lifecycleState);
+        if (options?.limit)
+            params.set("limit", String(options.limit));
+        if (options?.offset)
+            params.set("offset", String(options.offset));
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/ai-system-assets${qs ? `?${qs}` : ""}`);
+    }
+    async getAiSystemAsset(id) {
+        return this.request("GET", `/api/v1/ai-system-assets/${encodeURIComponent(id)}`);
+    }
+    async listEvidenceSets(options) {
+        const params = new URLSearchParams();
+        if (options?.initiativeId)
+            params.set("initiative_id", options.initiativeId);
+        if (options?.limit)
+            params.set("limit", String(options.limit));
+        if (options?.offset)
+            params.set("offset", String(options.offset));
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/evidence-sets${qs ? `?${qs}` : ""}`);
+    }
+    async getEvidenceSet(id) {
+        return this.request("GET", `/api/v1/evidence-sets/${encodeURIComponent(id)}`);
+    }
+    async createEvidenceSet(params) {
+        return this.request("POST", "/api/v1/evidence-sets", params);
+    }
+    async listIntelligenceRuns(options) {
+        const params = new URLSearchParams();
+        if (options?.runType)
+            params.set("run_type", options.runType);
+        if (options?.status)
+            params.set("status", options.status);
+        if (options?.limit)
+            params.set("limit", String(options.limit));
+        if (options?.offset)
+            params.set("offset", String(options.offset));
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/intelligence-runs${qs ? `?${qs}` : ""}`);
+    }
+    async getIntelligenceRun(id) {
+        return this.request("GET", `/api/v1/intelligence-runs/${encodeURIComponent(id)}`);
+    }
+    async createIntelligenceRun(params) {
+        return this.request("POST", "/api/v1/intelligence-runs", params);
+    }
+    async listContextAssets(options) {
+        const params = new URLSearchParams();
+        if (options?.contextType)
+            params.set("context_type", options.contextType);
+        if (options?.status)
+            params.set("status", options.status);
+        if (options?.limit)
+            params.set("limit", String(options.limit));
+        if (options?.offset)
+            params.set("offset", String(options.offset));
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/context-assets${qs ? `?${qs}` : ""}`);
+    }
+    async getContextAsset(id) {
+        return this.request("GET", `/api/v1/context-assets/${encodeURIComponent(id)}`);
+    }
+    async createContextAsset(params) {
+        return this.request("POST", "/api/v1/context-assets", params);
+    }
+    async activateContextAsset(id, versionId) {
+        return this.request("POST", `/api/v1/context-assets/${encodeURIComponent(id)}/activate`, { version_id: versionId });
+    }
     // --- Registry sync ---
     async dryRunRegistrySync(manifest) {
         return this.request("POST", "/api/v1/registry_syncs/dry_run", { manifest });

@@ -36,4 +36,44 @@ export function registerContextCommands(program: Command, getClient: () => Tunin
         process.exit(1);
       }
     });
+
+  const assets = context.command("assets").description("Manage reviewed, versioned context assets");
+  assets.command("list")
+    .option("--type <type>", "Context type")
+    .option("--status <status>", "Lifecycle status")
+    .option("-l, --limit <n>", "Max results", "50")
+    .option("--offset <n>", "Offset", "0")
+    .action(async (opts) => output.json(await getClient().listContextAssets({
+      contextType: opts.type, status: opts.status, limit: Number(opts.limit), offset: Number(opts.offset),
+    })));
+
+  assets.command("show <id>")
+    .action(async (id: string) => output.json(await getClient().getContextAsset(id)));
+
+  assets.command("create")
+    .description("Create a disabled draft; this never activates context automatically")
+    .requiredOption("--name <name>", "Context asset name")
+    .requiredOption("--type <type>", "procedure, precedent, knowledge, policy_guidance, or deterministic_candidate")
+    .requiredOption("--unit <json...>", "Bounded structured context units")
+    .option("--citation <json...>", "Safe evidence citations")
+    .option("--applicability <json>", "Structured applicability")
+    .option("--asset <id>", "Optional AI system asset public ID")
+    .action(async (opts) => output.json(await getClient().createContextAsset({
+      name: opts.name, context_type: opts.type,
+      structured_units: opts.unit.map(parseObject),
+      citations: (opts.citation || []).map(parseObject),
+      applicability: parseObject(opts.applicability) || {},
+      ai_system_asset_id: opts.asset,
+    })));
+
+  assets.command("activate <id>")
+    .description("Explicitly activate one reviewed context version")
+    .requiredOption("--version <id>", "Context version public ID")
+    .action(async (id: string, opts) => output.json(await getClient().activateContextAsset(id, opts.version)));
+}
+
+function parseObject(raw: string): Record<string, any> {
+  const value = JSON.parse(raw);
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Expected a JSON object");
+  return value;
 }

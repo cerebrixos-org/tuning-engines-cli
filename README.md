@@ -460,6 +460,10 @@ patterns.
 | `te interventions list/show/request/ack/complete/fail` | Manage runtime pause, resume, cancel, and replay requests |
 | `te state list/show/upsert` | Manage safe external workflow-state and memory references |
 | `te context resolve '<query>' --goal-key <key>` | Resolve authorized versioned context; observe mode records lineage without changing execution |
+| `te context assets list/show/create/activate` | Review and explicitly activate versioned context assets; create never activates |
+| `te assets list/show` | Inspect the tenant AI-system inventory and reviewed relationships |
+| `te trajectory evidence list/show/freeze` | Freeze reviewed Work Sessions into immutable, versioned evidence sets |
+| `te trajectory runs list/show/start` | Queue and inspect reproducible intelligence runs; recommendations remain review-only |
 | `te registry sync --file tuning-registry.yml --dry-run/--apply` | Diff or apply agent, skill, and MCP registry manifests |
 | `te registry show <id>` | Inspect an applied registry sync |
 | `te work-sessions list/show/complete/confirm-outcome` | Inspect and update Work Sessions |

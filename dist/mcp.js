@@ -269,6 +269,52 @@ function runtimeAndGovernanceTools(allowRegistryWrites = false) {
             },
         },
         {
+            name: "list_ai_system_assets",
+            description: "List authorized AI system assets across agents, MCP, tools, skills, models, workflows, context, identities, and infrastructure.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    asset_type: { type: "string" }, source_system: { type: "string" },
+                    lifecycle_state: { type: "string" }, limit: { type: "number" }, offset: { type: "number" },
+                },
+            },
+        },
+        {
+            name: "show_ai_system_asset",
+            description: "Show one authorized asset and its reviewed current relationships.",
+            inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+        },
+        {
+            name: "list_trajectory_evidence_sets",
+            description: "List immutable, reviewed evidence-set versions used by trajectory intelligence.",
+            inputSchema: { type: "object", properties: { initiative_id: { type: "string" }, limit: { type: "number" }, offset: { type: "number" } } },
+        },
+        {
+            name: "show_trajectory_evidence_set",
+            description: "Show one immutable evidence set and its safe evidence locators.",
+            inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+        },
+        {
+            name: "list_intelligence_runs",
+            description: "List reproducible trajectory intelligence executions and their version/status metadata.",
+            inputSchema: { type: "object", properties: { run_type: { type: "string" }, status: { type: "string" }, limit: { type: "number" }, offset: { type: "number" } } },
+        },
+        {
+            name: "show_intelligence_run",
+            description: "Show one intelligence run, including evidence digest, versions, safe result summary, cost, and latency.",
+            inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+        },
+        {
+            name: "list_context_assets",
+            description: "List governed context assets. Content remains versioned and inactive until explicitly activated.",
+            inputSchema: { type: "object", properties: { context_type: { type: "string" }, status: { type: "string" }, limit: { type: "number" }, offset: { type: "number" } } },
+        },
+        {
+            name: "show_context_asset",
+            description: "Show one governed context asset and its immutable versions.",
+            inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+        },
+        {
             name: "show_registry_sync",
             description: "Show one registry-manifest sync result.",
             inputSchema: {
@@ -427,6 +473,49 @@ function runtimeAndGovernanceTools(allowRegistryWrites = false) {
                     type: "object",
                     properties: { data: { type: "object", additionalProperties: true } },
                     required: ["data"],
+                },
+            },
+            {
+                name: "freeze_trajectory_evidence_set",
+                description: "Freeze reviewed Work Sessions into an immutable evidence version. Requires --enable-registry-writes.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        initiative_id: { type: "string" }, name: { type: "string" },
+                        work_item_ids: { type: "array", items: { type: "string" } },
+                        filter_snapshot: { type: "object" },
+                    },
+                    required: ["initiative_id", "work_item_ids"],
+                },
+            },
+            {
+                name: "start_intelligence_run",
+                description: "Queue versioned trajectory intelligence. Suggestions remain review-only. Requires --enable-registry-writes.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        initiative_id: { type: "string" }, run_type: { type: "string" },
+                        evidence_set_id: { type: "string" }, parameters: { type: "object" },
+                    },
+                    required: ["initiative_id", "run_type"],
+                },
+            },
+            {
+                name: "create_context_asset_draft",
+                description: "Create a disabled context draft. It never activates automatically. Requires --enable-registry-writes.",
+                inputSchema: {
+                    type: "object",
+                    properties: { data: { type: "object", additionalProperties: true } },
+                    required: ["data"],
+                },
+            },
+            {
+                name: "activate_context_asset",
+                description: "Explicitly activate one reviewed context version. Requires --enable-registry-writes.",
+                inputSchema: {
+                    type: "object",
+                    properties: { id: { type: "string" }, version_id: { type: "string" } },
+                    required: ["id", "version_id"],
                 },
             },
             {
@@ -1854,6 +1943,50 @@ async function startMcpServer(options = {}) {
                 case "show_runtime_state_reference":
                     result = await getClient().getRuntimeStateReference(String(args.id));
                     break;
+                case "list_ai_system_assets":
+                    result = await getClient().listAiSystemAssets({
+                        assetType: args?.asset_type,
+                        sourceSystem: args?.source_system,
+                        lifecycleState: args?.lifecycle_state,
+                        limit: args?.limit,
+                        offset: args?.offset,
+                    });
+                    break;
+                case "show_ai_system_asset":
+                    result = await getClient().getAiSystemAsset(String(args.id));
+                    break;
+                case "list_trajectory_evidence_sets":
+                    result = await getClient().listEvidenceSets({
+                        initiativeId: args?.initiative_id,
+                        limit: args?.limit,
+                        offset: args?.offset,
+                    });
+                    break;
+                case "show_trajectory_evidence_set":
+                    result = await getClient().getEvidenceSet(String(args.id));
+                    break;
+                case "list_intelligence_runs":
+                    result = await getClient().listIntelligenceRuns({
+                        runType: args?.run_type,
+                        status: args?.status,
+                        limit: args?.limit,
+                        offset: args?.offset,
+                    });
+                    break;
+                case "show_intelligence_run":
+                    result = await getClient().getIntelligenceRun(String(args.id));
+                    break;
+                case "list_context_assets":
+                    result = await getClient().listContextAssets({
+                        contextType: args?.context_type,
+                        status: args?.status,
+                        limit: args?.limit,
+                        offset: args?.offset,
+                    });
+                    break;
+                case "show_context_asset":
+                    result = await getClient().getContextAsset(String(args.id));
+                    break;
                 case "upsert_runtime_state_reference": {
                     if (!allowRegistryWrites)
                         throw new Error("Runtime writes are disabled. Start MCP with --enable-registry-writes.");
@@ -1863,6 +1996,47 @@ async function startMcpServer(options = {}) {
                     result = await getClient().upsertRuntimeStateReference(data);
                     break;
                 }
+                case "freeze_trajectory_evidence_set": {
+                    if (!allowRegistryWrites)
+                        throw new Error("Trajectory writes are disabled. Start MCP with --enable-registry-writes.");
+                    const data = {
+                        initiative_id: String(args.initiative_id),
+                        name: args?.name,
+                        work_item_ids: args?.work_item_ids,
+                        filter_snapshot: args?.filter_snapshot,
+                    };
+                    if (hasBlockedSecretField(data))
+                        throw new Error("Evidence metadata may not contain secrets.");
+                    result = await getClient().createEvidenceSet(data);
+                    break;
+                }
+                case "start_intelligence_run": {
+                    if (!allowRegistryWrites)
+                        throw new Error("Trajectory writes are disabled. Start MCP with --enable-registry-writes.");
+                    const data = {
+                        initiative_id: String(args.initiative_id), run_type: String(args.run_type),
+                        evidence_set_id: args?.evidence_set_id,
+                        parameters: args?.parameters,
+                    };
+                    if (hasBlockedSecretField(data))
+                        throw new Error("Intelligence parameters may not contain secrets.");
+                    result = await getClient().createIntelligenceRun(data);
+                    break;
+                }
+                case "create_context_asset_draft": {
+                    if (!allowRegistryWrites)
+                        throw new Error("Context writes are disabled. Start MCP with --enable-registry-writes.");
+                    const data = parseDataObject(args?.data);
+                    if (hasBlockedSecretField(data))
+                        throw new Error("Context assets may not contain secrets or raw credential fields.");
+                    result = await getClient().createContextAsset(data);
+                    break;
+                }
+                case "activate_context_asset":
+                    if (!allowRegistryWrites)
+                        throw new Error("Context writes are disabled. Start MCP with --enable-registry-writes.");
+                    result = await getClient().activateContextAsset(String(args.id), String(args.version_id));
+                    break;
                 case "registry_sync_dry_run": {
                     const manifest = parseDataObject(args?.manifest, "manifest");
                     if (hasBlockedSecretField(manifest))
