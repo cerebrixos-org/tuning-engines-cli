@@ -296,6 +296,10 @@ export declare class TuningEnginesClient {
         name?: string;
         filter_snapshot?: Record<string, any>;
     }): Promise<any>;
+    previewEvidenceSet(params: {
+        initiative_id: string;
+        work_item_ids: string[];
+    }): Promise<any>;
     listIntelligenceRuns(options?: {
         runType?: string;
         status?: string;

@@ -499,6 +499,9 @@ class TuningEnginesClient {
     async createEvidenceSet(params) {
         return this.request("POST", "/api/v1/evidence-sets", params);
     }
+    async previewEvidenceSet(params) {
+        return this.request("POST", "/api/v1/evidence-sets/preview", params);
+    }
     async listIntelligenceRuns(options) {
         const params = new URLSearchParams();
         if (options?.runType)

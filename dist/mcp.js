@@ -295,6 +295,18 @@ function runtimeAndGovernanceTools(allowRegistryWrites = false) {
             inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
         },
         {
+            name: "preview_trajectory_evidence_set",
+            description: "Preview selected Work Sessions and automatically correlated evidence without freezing or mutating records.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    initiative_id: { type: "string" },
+                    work_item_ids: { type: "array", items: { type: "string" } },
+                },
+                required: ["initiative_id", "work_item_ids"],
+            },
+        },
+        {
             name: "list_intelligence_runs",
             description: "List reproducible trajectory intelligence executions and their version/status metadata.",
             inputSchema: { type: "object", properties: { run_type: { type: "string" }, status: { type: "string" }, limit: { type: "number" }, offset: { type: "number" } } },
@@ -1976,6 +1988,11 @@ async function startMcpServer(options = {}) {
                     break;
                 case "show_trajectory_evidence_set":
                     result = await getClient().getEvidenceSet(String(args.id));
+                    break;
+                case "preview_trajectory_evidence_set":
+                    result = await getClient().previewEvidenceSet({
+                        initiative_id: String(args.initiative_id), work_item_ids: args.work_item_ids,
+                    });
                     break;
                 case "list_intelligence_runs":
                     result = await getClient().listIntelligenceRuns({

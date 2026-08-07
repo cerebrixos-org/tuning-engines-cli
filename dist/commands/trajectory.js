@@ -57,6 +57,13 @@ function registerTrajectoryCommands(program, getClient) {
         initiative_id: opts.initiative, work_item_ids: opts.workItem,
         name: opts.name, filter_snapshot: parseObject(opts.filterSnapshot),
     })));
+    evidence.command("preview")
+        .description("Preview selected Work Sessions and automatically correlated evidence without freezing")
+        .requiredOption("--initiative <id>", "Initiative public ID")
+        .requiredOption("--work-item <id...>", "Work Session public IDs")
+        .action(async (opts) => output.json(await getClient().previewEvidenceSet({
+        initiative_id: opts.initiative, work_item_ids: opts.workItem,
+    })));
     const runs = trajectory.command("runs").description("Run reproducible trajectory intelligence");
     runs.command("list")
         .option("--type <type>", "Run type")

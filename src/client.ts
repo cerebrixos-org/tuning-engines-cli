@@ -693,6 +693,10 @@ export class TuningEnginesClient {
     return this.request("POST", "/api/v1/evidence-sets", params);
   }
 
+  async previewEvidenceSet(params: { initiative_id: string; work_item_ids: string[] }): Promise<any> {
+    return this.request("POST", "/api/v1/evidence-sets/preview", params);
+  }
+
   async listIntelligenceRuns(options?: { runType?: string; status?: string; limit?: number; offset?: number }): Promise<any> {
     const params = new URLSearchParams();
     if (options?.runType) params.set("run_type", options.runType);

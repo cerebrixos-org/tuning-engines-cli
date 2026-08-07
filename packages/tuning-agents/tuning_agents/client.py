@@ -559,6 +559,14 @@ class TuningClient:
             trace_type="control",
         )
 
+    def preview_evidence_set(self, *, initiative_id: str, work_item_ids: list[str]) -> Any:
+        return self.request(
+            "POST",
+            "/api/v1/evidence-sets/preview",
+            json={"initiative_id": initiative_id, "work_item_ids": work_item_ids},
+            trace_type="control",
+        )
+
     def list_intelligence_runs(
         self,
         *,

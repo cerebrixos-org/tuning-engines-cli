@@ -64,6 +64,7 @@ def test_trajectory_and_asset_helpers_use_control_plane_contract(monkeypatch):
 
     client.list_ai_system_assets(asset_type="agent", limit=25)
     client.freeze_evidence_set(initiative_id="ini_1", work_item_ids=["wis_1"])
+    client.preview_evidence_set(initiative_id="ini_1", work_item_ids=["wis_1"])
     client.start_intelligence_run(
         initiative_id="ini_1", run_type="trajectory_comparison", evidence_set_id="evs_1"
     )
@@ -72,7 +73,8 @@ def test_trajectory_and_asset_helpers_use_control_plane_contract(monkeypatch):
         "GET", "https://app.example.test/api/v1/ai-system-assets?asset_type=agent&limit=25"
     )
     assert FakeHttpClient.calls[1][0:2] == ("POST", "https://app.example.test/api/v1/evidence-sets")
-    assert FakeHttpClient.calls[2][0:2] == ("POST", "https://app.example.test/api/v1/intelligence-runs")
+    assert FakeHttpClient.calls[2][0:2] == ("POST", "https://app.example.test/api/v1/evidence-sets/preview")
+    assert FakeHttpClient.calls[3][0:2] == ("POST", "https://app.example.test/api/v1/intelligence-runs")
 
 
 def test_context_asset_draft_and_activation_are_separate(monkeypatch):

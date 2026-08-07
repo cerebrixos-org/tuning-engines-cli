@@ -462,7 +462,7 @@ patterns.
 | `te context resolve '<query>' --goal-key <key>` | Resolve authorized versioned context; observe mode records lineage without changing execution |
 | `te context assets list/show/create/review/activate` | Draft, review, and explicitly activate versioned context; deterministic review enforces release gates |
 | `te assets list/show` | Inspect the tenant AI-system inventory and reviewed relationships |
-| `te trajectory evidence list/show/freeze` | Freeze reviewed Work Sessions into immutable, versioned evidence sets |
+| `te trajectory evidence list/show/preview/freeze` | Preview correlated scope, then freeze reviewed Work Sessions into immutable evidence sets |
 | `te trajectory runs list/show/start` | Queue and inspect reproducible intelligence runs; recommendations remain review-only |
 | `te registry sync --file tuning-registry.yml --dry-run/--apply` | Diff or apply agent, skill, and MCP registry manifests |
 | `te registry show <id>` | Inspect an applied registry sync |
@@ -659,6 +659,7 @@ All commands support `--json` for machine-readable output.
 | `list_runtime_interventions` / `show_runtime_intervention` | Inspect runtime control requests |
 | `create/ack/complete/fail_runtime_intervention` | Operate intervention lifecycle; requires `--enable-registry-writes` |
 | `list/show/upsert_runtime_state_reference` | Manage safe external state and memory pointers |
+| `list/show/preview_trajectory_evidence_set` | Inspect immutable evidence and preview correlated scope without mutation |
 | `registry_sync_dry_run` / `registry_sync_apply` / `show_registry_sync` | Diff, apply, and inspect registry manifests |
 | `list_work_sessions` / `show_work_session` / `complete_work_session` | Inspect and complete Work Sessions |
 | `list_initiatives` / `show_initiative` | Inspect initiative groupings |
