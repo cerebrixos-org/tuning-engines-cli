@@ -174,6 +174,16 @@ export declare class TuningEnginesClient {
         offset?: number;
     }): Promise<any>;
     getTrace(runId: string): Promise<any>;
+    resolveContext(params: {
+        query: string;
+        context_asset_ids?: string[];
+        goal_key?: string;
+        entities?: string[];
+        action?: string;
+        sensitivity?: string;
+        request_id?: string;
+        run_id?: string;
+    }): Promise<any>;
     createOutcomeContext(params: {
         title: string;
         outcome_key?: string;
@@ -266,6 +276,68 @@ export declare class TuningEnginesClient {
     }): Promise<any>;
     upsertRuntimeStateReference(params: Record<string, any>): Promise<any>;
     getRuntimeStateReference(id: string): Promise<any>;
+    listAiSystemAssets(options?: {
+        assetType?: string;
+        sourceSystem?: string;
+        lifecycleState?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getAiSystemAsset(id: string): Promise<any>;
+    listEvidenceSets(options?: {
+        initiativeId?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getEvidenceSet(id: string): Promise<any>;
+    createEvidenceSet(params: {
+        initiative_id: string;
+        work_item_ids: string[];
+        name?: string;
+        filter_snapshot?: Record<string, any>;
+    }): Promise<any>;
+    previewEvidenceSet(params: {
+        initiative_id: string;
+        work_item_ids: string[];
+    }): Promise<any>;
+    listTrajectorySelectionRules(options?: {
+        initiativeId?: string;
+    }): Promise<any>;
+    createTrajectorySelectionRule(params: Record<string, any>): Promise<any>;
+    previewTrajectorySelectionRule(id: string): Promise<any>;
+    freezeTrajectorySelectionRule(id: string, name?: string): Promise<any>;
+    recordContextUse(params: Record<string, any>): Promise<any>;
+    listIntelligenceRuns(options?: {
+        runType?: string;
+        status?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getIntelligenceRun(id: string): Promise<any>;
+    createIntelligenceRun(params: {
+        initiative_id: string;
+        run_type: string;
+        evidence_set_id?: string;
+        parameters?: Record<string, any>;
+    }): Promise<any>;
+    listComparisonStudies(options?: {
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getComparisonStudy(id: string): Promise<any>;
+    createComparisonStudy(params: Record<string, any>): Promise<any>;
+    updateComparisonStudy(id: string, params: Record<string, any>): Promise<any>;
+    runComparisonStudy(id: string): Promise<any>;
+    listContextAssets(options?: {
+        contextType?: string;
+        status?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getContextAsset(id: string): Promise<any>;
+    createContextAsset(params: Record<string, any>): Promise<any>;
+    reviewContextAsset(id: string, versionId: string, validationPacket?: Record<string, any>): Promise<any>;
+    activateContextAsset(id: string, versionId: string): Promise<any>;
     dryRunRegistrySync(manifest: Record<string, any>): Promise<any>;
     applyRegistrySync(manifest: Record<string, any>): Promise<any>;
     getRegistrySync(id: string): Promise<any>;

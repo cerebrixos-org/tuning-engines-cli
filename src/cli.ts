@@ -38,6 +38,9 @@ import { registerUserModelCommands } from "./commands/user-models";
 import { registerSkillCommands } from "./commands/skills";
 import { registerComplianceCommands } from "./commands/compliance";
 import { registerFeedbackCommands } from "./commands/feedback";
+import { registerContextCommands } from "./commands/context";
+import { registerAssetCommands } from "./commands/assets";
+import { registerTrajectoryCommands } from "./commands/trajectory";
 
 const program = new Command();
 
@@ -69,6 +72,9 @@ registerAgentCommands(program, getClient);
 registerSkillCommands(program, getClient);
 registerComplianceCommands(program, getClient);
 registerFeedbackCommands(program, getClient);
+registerContextCommands(program, getClient);
+registerAssetCommands(program, getClient);
+registerTrajectoryCommands(program, getClient);
 registerTenantCommands(program, getClient);
 registerApprovalCommands(program, getClient);
 registerTraceCommands(program, getClient);

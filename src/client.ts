@@ -411,6 +411,19 @@ export class TuningEnginesClient {
     return this.request("GET", `/api/v1/traces/${encodeURIComponent(runId)}`);
   }
 
+  async resolveContext(params: {
+    query: string;
+    context_asset_ids?: string[];
+    goal_key?: string;
+    entities?: string[];
+    action?: string;
+    sensitivity?: string;
+    request_id?: string;
+    run_id?: string;
+  }): Promise<any> {
+    return this.request("POST", "/api/v1/context/resolve", params);
+  }
+
   async createOutcomeContext(params: { title: string; outcome_key?: string; context_id?: string }): Promise<any> {
     return this.request("POST", "/api/v1/outcome-context", params);
   }
@@ -633,6 +646,154 @@ export class TuningEnginesClient {
 
   async getRuntimeStateReference(id: string): Promise<any> {
     return this.request("GET", `/api/v1/runtime_state_references/${encodeURIComponent(id)}`);
+  }
+
+  // --- AI system assets and trajectory intelligence ---
+
+  async listAiSystemAssets(options?: {
+    assetType?: string;
+    sourceSystem?: string;
+    lifecycleState?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.assetType) params.set("asset_type", options.assetType);
+    if (options?.sourceSystem) params.set("source_system", options.sourceSystem);
+    if (options?.lifecycleState) params.set("lifecycle_state", options.lifecycleState);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/ai-system-assets${qs ? `?${qs}` : ""}`);
+  }
+
+  async getAiSystemAsset(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/ai-system-assets/${encodeURIComponent(id)}`);
+  }
+
+  async listEvidenceSets(options?: { initiativeId?: string; limit?: number; offset?: number }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.initiativeId) params.set("initiative_id", options.initiativeId);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/evidence-sets${qs ? `?${qs}` : ""}`);
+  }
+
+  async getEvidenceSet(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/evidence-sets/${encodeURIComponent(id)}`);
+  }
+
+  async createEvidenceSet(params: {
+    initiative_id: string;
+    work_item_ids: string[];
+    name?: string;
+    filter_snapshot?: Record<string, any>;
+  }): Promise<any> {
+    return this.request("POST", "/api/v1/evidence-sets", params);
+  }
+
+  async previewEvidenceSet(params: { initiative_id: string; work_item_ids: string[] }): Promise<any> {
+    return this.request("POST", "/api/v1/evidence-sets/preview", params);
+  }
+
+  async listTrajectorySelectionRules(options?: { initiativeId?: string }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.initiativeId) params.set("initiative_id", options.initiativeId);
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/trajectory-selection-rules${qs ? `?${qs}` : ""}`);
+  }
+
+  async createTrajectorySelectionRule(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/trajectory-selection-rules", params);
+  }
+
+  async previewTrajectorySelectionRule(id: string): Promise<any> {
+    return this.request("POST", `/api/v1/trajectory-selection-rules/${encodeURIComponent(id)}/preview`, {});
+  }
+
+  async freezeTrajectorySelectionRule(id: string, name?: string): Promise<any> {
+    return this.request("POST", `/api/v1/trajectory-selection-rules/${encodeURIComponent(id)}/freeze`, { name });
+  }
+
+  async recordContextUse(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/context/uses", params);
+  }
+
+  async listIntelligenceRuns(options?: { runType?: string; status?: string; limit?: number; offset?: number }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.runType) params.set("run_type", options.runType);
+    if (options?.status) params.set("status", options.status);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/intelligence-runs${qs ? `?${qs}` : ""}`);
+  }
+
+  async getIntelligenceRun(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/intelligence-runs/${encodeURIComponent(id)}`);
+  }
+
+  async createIntelligenceRun(params: {
+    initiative_id: string;
+    run_type: string;
+    evidence_set_id?: string;
+    parameters?: Record<string, any>;
+  }): Promise<any> {
+    return this.request("POST", "/api/v1/intelligence-runs", params);
+  }
+
+  async listComparisonStudies(options?: { limit?: number; offset?: number }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/comparison-studies${qs ? `?${qs}` : ""}`);
+  }
+
+  async getComparisonStudy(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/comparison-studies/${encodeURIComponent(id)}`);
+  }
+
+  async createComparisonStudy(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/comparison-studies", params);
+  }
+
+  async updateComparisonStudy(id: string, params: Record<string, any>): Promise<any> {
+    return this.request("PATCH", `/api/v1/comparison-studies/${encodeURIComponent(id)}`, params);
+  }
+
+  async runComparisonStudy(id: string): Promise<any> {
+    return this.request("POST", `/api/v1/comparison-studies/${encodeURIComponent(id)}/run`, {});
+  }
+
+  async listContextAssets(options?: { contextType?: string; status?: string; limit?: number; offset?: number }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.contextType) params.set("context_type", options.contextType);
+    if (options?.status) params.set("status", options.status);
+    if (options?.limit) params.set("limit", String(options.limit));
+    if (options?.offset) params.set("offset", String(options.offset));
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/context-assets${qs ? `?${qs}` : ""}`);
+  }
+
+  async getContextAsset(id: string): Promise<any> {
+    return this.request("GET", `/api/v1/context-assets/${encodeURIComponent(id)}`);
+  }
+
+  async createContextAsset(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/context-assets", params);
+  }
+
+  async reviewContextAsset(id: string, versionId: string, validationPacket: Record<string, any> = {}): Promise<any> {
+    return this.request("POST", `/api/v1/context-assets/${encodeURIComponent(id)}/review`, {
+      version_id: versionId,
+      validation_packet: validationPacket,
+    });
+  }
+
+  async activateContextAsset(id: string, versionId: string): Promise<any> {
+    return this.request("POST", `/api/v1/context-assets/${encodeURIComponent(id)}/activate`, { version_id: versionId });
   }
 
   // --- Registry sync ---

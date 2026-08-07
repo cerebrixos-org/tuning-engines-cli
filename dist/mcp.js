@@ -146,6 +146,24 @@ function runtimeAndGovernanceTools(allowRegistryWrites = false) {
             },
         },
         {
+            name: "resolve_governed_context",
+            description: "Resolve authorized, versioned Tuning Engines context for a goal or action. Observe mode returns only match lineage and never changes execution.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    query: { type: "string", description: "Short task or retrieval query; do not include secrets" },
+                    context_asset_ids: { type: "array", items: { type: "string" } },
+                    goal_key: { type: "string" },
+                    entities: { type: "array", items: { type: "string" } },
+                    action: { type: "string" },
+                    sensitivity: { type: "string" },
+                    request_id: { type: "string" },
+                    run_id: { type: "string" },
+                },
+                required: ["query"],
+            },
+        },
+        {
             name: "create_trace",
             description: "Ingest or update a runtime trace. Include run_id/request_id and normalized event types when possible. metadata.decision must contain redacted summaries only. Do not include secrets. Works with a user API token or inference key.",
             inputSchema: {
@@ -249,6 +267,84 @@ function runtimeAndGovernanceTools(allowRegistryWrites = false) {
                 properties: { id: { type: "string" } },
                 required: ["id"],
             },
+        },
+        {
+            name: "list_ai_system_assets",
+            description: "List authorized AI system assets across agents, MCP, tools, skills, models, workflows, context, identities, and infrastructure.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    asset_type: { type: "string" }, source_system: { type: "string" },
+                    lifecycle_state: { type: "string" }, limit: { type: "number" }, offset: { type: "number" },
+                },
+            },
+        },
+        {
+            name: "show_ai_system_asset",
+            description: "Show one authorized asset and its reviewed current relationships.",
+            inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+        },
+        {
+            name: "list_trajectory_evidence_sets",
+            description: "List immutable, reviewed evidence-set versions used by trajectory intelligence.",
+            inputSchema: { type: "object", properties: { initiative_id: { type: "string" }, limit: { type: "number" }, offset: { type: "number" } } },
+        },
+        {
+            name: "show_trajectory_evidence_set",
+            description: "Show one immutable evidence set and its safe evidence locators.",
+            inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+        },
+        {
+            name: "preview_trajectory_evidence_set",
+            description: "Preview selected Work Sessions and automatically correlated evidence without freezing or mutating records.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    initiative_id: { type: "string" },
+                    work_item_ids: { type: "array", items: { type: "string" } },
+                },
+                required: ["initiative_id", "work_item_ids"],
+            },
+        },
+        {
+            name: "list_trajectory_selection_rules",
+            description: "List safe saved source-selection rules for Trajectory Studio.",
+            inputSchema: { type: "object", properties: { initiative_id: { type: "string" } } },
+        },
+        {
+            name: "preview_trajectory_selection_rule",
+            description: "Preview authorized Work Sessions selected by a saved rule without freezing evidence.",
+            inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+        },
+        {
+            name: "list_intelligence_runs",
+            description: "List reproducible trajectory intelligence executions and their version/status metadata.",
+            inputSchema: { type: "object", properties: { run_type: { type: "string" }, status: { type: "string" }, limit: { type: "number" }, offset: { type: "number" } } },
+        },
+        {
+            name: "list_comparison_studies",
+            description: "List authorized, versioned Comparison Studies for models, agents, tools, policies, context, workflows, or runtimes.",
+            inputSchema: { type: "object", properties: { limit: { type: "number" }, offset: { type: "number" } } },
+        },
+        {
+            name: "show_comparison_study",
+            description: "Show one Comparison Study with frozen evidence identity, metric configuration, confidence, and safe report drilldown.",
+            inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+        },
+        {
+            name: "show_intelligence_run",
+            description: "Show one intelligence run, including evidence digest, versions, safe result summary, cost, and latency.",
+            inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+        },
+        {
+            name: "list_context_assets",
+            description: "List governed context assets. Content remains versioned and inactive until explicitly activated.",
+            inputSchema: { type: "object", properties: { context_type: { type: "string" }, status: { type: "string" }, limit: { type: "number" }, offset: { type: "number" } } },
+        },
+        {
+            name: "show_context_asset",
+            description: "Show one governed context asset and its immutable versions.",
+            inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
         },
         {
             name: "show_registry_sync",
@@ -409,6 +505,91 @@ function runtimeAndGovernanceTools(allowRegistryWrites = false) {
                     type: "object",
                     properties: { data: { type: "object", additionalProperties: true } },
                     required: ["data"],
+                },
+            },
+            {
+                name: "freeze_trajectory_evidence_set",
+                description: "Freeze reviewed Work Sessions into an immutable evidence version. Requires --enable-registry-writes.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        initiative_id: { type: "string" }, name: { type: "string" },
+                        work_item_ids: { type: "array", items: { type: "string" } },
+                        filter_snapshot: { type: "object" },
+                    },
+                    required: ["initiative_id", "work_item_ids"],
+                },
+            },
+            {
+                name: "create_trajectory_selection_rule",
+                description: "Create a bounded, secret-free source-selection rule. Requires --enable-registry-writes.",
+                inputSchema: { type: "object", properties: { data: { type: "object", additionalProperties: true } }, required: ["data"] },
+            },
+            {
+                name: "freeze_trajectory_selection_rule",
+                description: "Freeze the current authorized candidates from a saved rule. Requires --enable-registry-writes.",
+                inputSchema: { type: "object", properties: { id: { type: "string" }, name: { type: "string" } }, required: ["id"] },
+            },
+            {
+                name: "record_context_use",
+                description: "Record context acceptance, rejection, deviation, or outcome without raw prompts or memory content. Requires --enable-registry-writes.",
+                inputSchema: { type: "object", properties: { data: { type: "object", additionalProperties: true } }, required: ["data"] },
+            },
+            {
+                name: "start_intelligence_run",
+                description: "Queue versioned trajectory intelligence. Suggestions remain review-only. Requires --enable-registry-writes.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        initiative_id: { type: "string" }, run_type: { type: "string" },
+                        evidence_set_id: { type: "string" }, parameters: { type: "object" },
+                    },
+                    required: ["initiative_id", "run_type"],
+                },
+            },
+            {
+                name: "create_comparison_study",
+                description: "Create a versioned, secret-free Comparison Study. Requires --enable-registry-writes.",
+                inputSchema: { type: "object", properties: { data: { type: "object", additionalProperties: true } }, required: ["data"] },
+            },
+            {
+                name: "update_comparison_study",
+                description: "Update a Comparison Study configuration and advance its version. Requires --enable-registry-writes.",
+                inputSchema: { type: "object", properties: { id: { type: "string" }, data: { type: "object", additionalProperties: true } }, required: ["id", "data"] },
+            },
+            {
+                name: "run_comparison_study",
+                description: "Freeze currently matching evidence and queue a Comparison Study report. Requires --enable-registry-writes.",
+                inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+            },
+            {
+                name: "create_context_asset_draft",
+                description: "Create a disabled context draft. It never activates automatically. Requires --enable-registry-writes.",
+                inputSchema: {
+                    type: "object",
+                    properties: { data: { type: "object", additionalProperties: true } },
+                    required: ["data"],
+                },
+            },
+            {
+                name: "review_context_asset",
+                description: "Review a context draft. Deterministic candidates require evidence-backed release gates. Requires --enable-registry-writes.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        id: { type: "string" }, version_id: { type: "string" },
+                        validation_packet: { type: "object" },
+                    },
+                    required: ["id", "version_id"],
+                },
+            },
+            {
+                name: "activate_context_asset",
+                description: "Explicitly activate one reviewed context version. Requires --enable-registry-writes.",
+                inputSchema: {
+                    type: "object",
+                    properties: { id: { type: "string" }, version_id: { type: "string" } },
+                    required: ["id", "version_id"],
                 },
             },
             {
@@ -1747,6 +1928,23 @@ async function startMcpServer(options = {}) {
                 case "show_trace":
                     result = await getClient().getTrace(args.run_id);
                     break;
+                case "resolve_governed_context": {
+                    const payload = {
+                        query: String(args.query),
+                        context_asset_ids: args?.context_asset_ids,
+                        goal_key: args?.goal_key,
+                        entities: args?.entities,
+                        action: args?.action,
+                        sensitivity: args?.sensitivity,
+                        request_id: args?.request_id,
+                        run_id: args?.run_id,
+                    };
+                    if (hasBlockedSecretField(payload)) {
+                        throw new Error("Context request appears to contain raw secret fields. Remove secrets before resolving context.");
+                    }
+                    result = await getClient().resolveContext(payload);
+                    break;
+                }
                 case "create_trace": {
                     const data = parseDataObject(args?.data);
                     if (hasBlockedSecretField(data)) {
@@ -1819,6 +2017,70 @@ async function startMcpServer(options = {}) {
                 case "show_runtime_state_reference":
                     result = await getClient().getRuntimeStateReference(String(args.id));
                     break;
+                case "list_ai_system_assets":
+                    result = await getClient().listAiSystemAssets({
+                        assetType: args?.asset_type,
+                        sourceSystem: args?.source_system,
+                        lifecycleState: args?.lifecycle_state,
+                        limit: args?.limit,
+                        offset: args?.offset,
+                    });
+                    break;
+                case "show_ai_system_asset":
+                    result = await getClient().getAiSystemAsset(String(args.id));
+                    break;
+                case "list_trajectory_evidence_sets":
+                    result = await getClient().listEvidenceSets({
+                        initiativeId: args?.initiative_id,
+                        limit: args?.limit,
+                        offset: args?.offset,
+                    });
+                    break;
+                case "show_trajectory_evidence_set":
+                    result = await getClient().getEvidenceSet(String(args.id));
+                    break;
+                case "preview_trajectory_evidence_set":
+                    result = await getClient().previewEvidenceSet({
+                        initiative_id: String(args.initiative_id), work_item_ids: args.work_item_ids,
+                    });
+                    break;
+                case "list_trajectory_selection_rules":
+                    result = await getClient().listTrajectorySelectionRules({ initiativeId: args?.initiative_id });
+                    break;
+                case "preview_trajectory_selection_rule":
+                    result = await getClient().previewTrajectorySelectionRule(String(args.id));
+                    break;
+                case "list_intelligence_runs":
+                    result = await getClient().listIntelligenceRuns({
+                        runType: args?.run_type,
+                        status: args?.status,
+                        limit: args?.limit,
+                        offset: args?.offset,
+                    });
+                    break;
+                case "list_comparison_studies":
+                    result = await getClient().listComparisonStudies({
+                        limit: args?.limit,
+                        offset: args?.offset,
+                    });
+                    break;
+                case "show_comparison_study":
+                    result = await getClient().getComparisonStudy(String(args.id));
+                    break;
+                case "show_intelligence_run":
+                    result = await getClient().getIntelligenceRun(String(args.id));
+                    break;
+                case "list_context_assets":
+                    result = await getClient().listContextAssets({
+                        contextType: args?.context_type,
+                        status: args?.status,
+                        limit: args?.limit,
+                        offset: args?.offset,
+                    });
+                    break;
+                case "show_context_asset":
+                    result = await getClient().getContextAsset(String(args.id));
+                    break;
                 case "upsert_runtime_state_reference": {
                     if (!allowRegistryWrites)
                         throw new Error("Runtime writes are disabled. Start MCP with --enable-registry-writes.");
@@ -1826,6 +2088,102 @@ async function startMcpServer(options = {}) {
                     if (hasBlockedSecretField(data))
                         throw new Error("State references may not contain secrets.");
                     result = await getClient().upsertRuntimeStateReference(data);
+                    break;
+                }
+                case "freeze_trajectory_evidence_set": {
+                    if (!allowRegistryWrites)
+                        throw new Error("Trajectory writes are disabled. Start MCP with --enable-registry-writes.");
+                    const data = {
+                        initiative_id: String(args.initiative_id),
+                        name: args?.name,
+                        work_item_ids: args?.work_item_ids,
+                        filter_snapshot: args?.filter_snapshot,
+                    };
+                    if (hasBlockedSecretField(data))
+                        throw new Error("Evidence metadata may not contain secrets.");
+                    result = await getClient().createEvidenceSet(data);
+                    break;
+                }
+                case "create_trajectory_selection_rule": {
+                    if (!allowRegistryWrites)
+                        throw new Error("Trajectory writes are disabled. Start MCP with --enable-registry-writes.");
+                    const data = parseDataObject(args?.data);
+                    if (hasBlockedSecretField(data))
+                        throw new Error("Selection rules may not contain secrets.");
+                    result = await getClient().createTrajectorySelectionRule(data);
+                    break;
+                }
+                case "freeze_trajectory_selection_rule":
+                    if (!allowRegistryWrites)
+                        throw new Error("Trajectory writes are disabled. Start MCP with --enable-registry-writes.");
+                    result = await getClient().freezeTrajectorySelectionRule(String(args.id), args?.name);
+                    break;
+                case "record_context_use": {
+                    if (!allowRegistryWrites)
+                        throw new Error("Context writes are disabled. Start MCP with --enable-registry-writes.");
+                    const data = parseDataObject(args?.data);
+                    if (hasBlockedSecretField(data))
+                        throw new Error("Context-use receipts may not contain secrets or raw content.");
+                    result = await getClient().recordContextUse(data);
+                    break;
+                }
+                case "start_intelligence_run": {
+                    if (!allowRegistryWrites)
+                        throw new Error("Trajectory writes are disabled. Start MCP with --enable-registry-writes.");
+                    const data = {
+                        initiative_id: String(args.initiative_id), run_type: String(args.run_type),
+                        evidence_set_id: args?.evidence_set_id,
+                        parameters: args?.parameters,
+                    };
+                    if (hasBlockedSecretField(data))
+                        throw new Error("Intelligence parameters may not contain secrets.");
+                    result = await getClient().createIntelligenceRun(data);
+                    break;
+                }
+                case "create_comparison_study": {
+                    if (!allowRegistryWrites)
+                        throw new Error("Comparison writes are disabled. Start MCP with --enable-registry-writes.");
+                    const data = parseDataObject(args?.data);
+                    if (hasBlockedSecretField(data))
+                        throw new Error("Comparison Studies may not contain secrets or raw content.");
+                    result = await getClient().createComparisonStudy(data);
+                    break;
+                }
+                case "update_comparison_study": {
+                    if (!allowRegistryWrites)
+                        throw new Error("Comparison writes are disabled. Start MCP with --enable-registry-writes.");
+                    const data = parseDataObject(args?.data);
+                    if (hasBlockedSecretField(data))
+                        throw new Error("Comparison Studies may not contain secrets or raw content.");
+                    result = await getClient().updateComparisonStudy(String(args.id), data);
+                    break;
+                }
+                case "run_comparison_study":
+                    if (!allowRegistryWrites)
+                        throw new Error("Comparison writes are disabled. Start MCP with --enable-registry-writes.");
+                    result = await getClient().runComparisonStudy(String(args.id));
+                    break;
+                case "create_context_asset_draft": {
+                    if (!allowRegistryWrites)
+                        throw new Error("Context writes are disabled. Start MCP with --enable-registry-writes.");
+                    const data = parseDataObject(args?.data);
+                    if (hasBlockedSecretField(data))
+                        throw new Error("Context assets may not contain secrets or raw credential fields.");
+                    result = await getClient().createContextAsset(data);
+                    break;
+                }
+                case "activate_context_asset":
+                    if (!allowRegistryWrites)
+                        throw new Error("Context writes are disabled. Start MCP with --enable-registry-writes.");
+                    result = await getClient().activateContextAsset(String(args.id), String(args.version_id));
+                    break;
+                case "review_context_asset": {
+                    if (!allowRegistryWrites)
+                        throw new Error("Context writes are disabled. Start MCP with --enable-registry-writes.");
+                    const packet = (args?.validation_packet || {});
+                    if (hasBlockedSecretField(packet))
+                        throw new Error("Context validation packets may not contain secrets.");
+                    result = await getClient().reviewContextAsset(String(args.id), String(args.version_id), packet);
                     break;
                 }
                 case "registry_sync_dry_run": {

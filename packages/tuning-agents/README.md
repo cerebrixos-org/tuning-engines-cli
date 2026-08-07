@@ -17,6 +17,9 @@ Tuning Engines for the things it already does well:
 - Usage, request capture, auditability, and token economics
 - Client-side causal traces for LLM calls, MCP calls, LangGraph runs, and
   Temporal activities
+- Tenant-scoped AI-system asset inventory and reviewed topology reads
+- Immutable trajectory evidence sets and reproducible intelligence runs
+- Reviewed context-asset drafts with explicit, separately authorized activation
 
 For raw OpenAI-compatible clients such as OpenCode, direct Temporal Activities,
 and OpenAI SDK integrations, see
@@ -82,6 +85,73 @@ client.record_state_reference(
 )
 ```
 
+Trajectory intelligence is intentionally split into reviewable stages:
+
+```python
+assets = client.list_ai_system_assets(asset_type="agent")
+evidence = client.freeze_evidence_set(
+    initiative_id="ini_...",
+    work_item_ids=["wis_...", "wis_..."],
+    name="Successful incident recoveries",
+)
+run = client.start_intelligence_run(
+    initiative_id="ini_...",
+    run_type="trajectory_comparison",
+    evidence_set_id=evidence["evidence_set"]["public_id"],
+)
+
+# Drafting and activation are deliberately separate administrative actions.
+draft = client.create_context_asset_draft({
+    "name": "Incident recovery procedure",
+    "context_type": "procedure",
+    "structured_units": [{"step": "Verify the affected service"}],
+})
+client.review_context_asset(
+    draft["context_asset"]["public_id"],
+    version_id=draft["context_asset"]["versions"][0]["public_id"],
+)
+client.activate_context_asset(
+    draft["context_asset"]["public_id"],
+    version_id=draft["context_asset"]["versions"][0]["public_id"],
+)
+```
+
+Saved selection rules can build repeatable candidate pools without bypassing tenant authorization. Preview first, then freeze an immutable evidence version:
+
+```python
+rule = client.create_trajectory_selection_rule({
+    "initiative_id": "ini_...",
+    "name": "Successful checkout repairs",
+    "selection_mode": "hybrid",
+    "evidence_role": "positive",
+    "filters": {"goal_keys": ["checkout_reliability"], "statuses": ["succeeded"]},
+})
+client.preview_trajectory_selection_rule(rule["selection_rule"]["id"])
+client.freeze_trajectory_selection_rule(rule["selection_rule"]["id"])
+```
+
+Comparison Studies reuse Work Sessions, outcomes, evaluation profiles, and frozen evidence. Quality remains unmeasured unless a common evaluation profile scored the selected sessions:
+
+```python
+study = client.create_comparison_study({
+    "initiative_id": "ini_...",
+    "name": "Model A versus Model B",
+    "question_type": "model",
+    "variants": [
+        {"key": "a", "label": "Model A", "match": {"field": "model", "operator": "equals", "value": "model-a"}},
+        {"key": "b", "label": "Model B", "match": {"field": "model", "operator": "equals", "value": "model-b"}},
+    ],
+    "metric_config": {"metrics": ["success_rate", "quality_score", "avg_cost_cents", "p95_latency_ms"], "weights": {}, "success_source": "outcome"},
+})
+client.run_comparison_study(study["comparison_study"]["id"])
+```
+
+After a runtime receives context, it can asynchronously record whether the context was accepted, rejected, or deviated from, and later attach an outcome. Send IDs and bounded reason metadata only; never send raw prompts, memory content, or credentials.
+
+The server rechecks tenant scope, role permissions, review state, and release
+gates. The SDK never stores raw prompts, memory content, credentials, or
+chain-of-thought in an asset or evidence-set helper.
+
 The LangGraph adapter exposes two executable resource classes:
 
 - MCP tools discovered from the Tuning Engines proxy
@@ -139,6 +209,11 @@ interventions, model catalog lookups, usage lookups, and external state
 references. Temporal owns durability; Tuning Engines owns governance, policy,
 usage, traces, approvals, and cost controls.
 
+Both LangGraph and Temporal adapters can resolve governed context. In `observe`
+mode the API records asset/version match lineage and latency but returns no
+context units, so workflow behavior is unchanged. Temporal performs resolution
+inside `resolve_context_activity`, never in deterministic workflow code.
+
 The base Temporal plugin is deliberately a primitives plugin. Its built-in
 workflow is a minimal starter, not a canonical agent brain. If you need ReAct
 behavior parity with the LangGraph adapter, use the separate Temporal ReAct
@@ -168,6 +243,7 @@ plugin = create_tuning_engines_plugin(
         interventions=True,
         model_catalog=True,
         usage=True,
+        context_resolution=True,
     )
 )
 TuningAgentWorkflow = define_temporal_workflow()

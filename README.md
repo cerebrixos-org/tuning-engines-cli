@@ -459,10 +459,20 @@ patterns.
 | `te approvals deny <id>` | Deny a pending request |
 | `te interventions list/show/request/ack/complete/fail` | Manage runtime pause, resume, cancel, and replay requests |
 | `te state list/show/upsert` | Manage safe external workflow-state and memory references |
+| `te context resolve '<query>' --goal-key <key>` | Resolve authorized versioned context; observe mode records lineage without changing execution |
+| `te context assets list/show/create/review/activate` | Draft, review, and explicitly activate versioned context; deterministic review enforces release gates |
+| `te assets list/show` | Inspect the tenant AI-system inventory and reviewed relationships |
+| `te trajectory evidence list/show/preview/freeze` | Preview correlated scope, then freeze reviewed Work Sessions into immutable evidence sets |
+| `te trajectory rules list/create/preview/freeze` | Save source-selection rules, preview authorized candidates, and freeze an immutable reviewed snapshot |
+| `te trajectory studies list/show/create/update/run` | Compare models, agents, tools, context, policies, workflows, or runtimes using frozen evidence and common metrics |
+| `te trajectory runs list/show/start` | Queue and inspect reproducible intelligence runs; recommendations remain review-only |
+| `te context record-use --event accepted|rejected|deviated|outcome` | Record bounded context feedback and outcome attribution without raw prompts or memory content |
 | `te registry sync --file tuning-registry.yml --dry-run/--apply` | Diff or apply agent, skill, and MCP registry manifests |
 | `te registry show <id>` | Inspect an applied registry sync |
 | `te work-sessions list/show/complete/confirm-outcome` | Inspect and update Work Sessions |
 | `te initiatives list/show/create/update` | Manage strategic initiative groupings |
+
+Context assets are reviewed immutable versions; MCP context sources remain external connectors. The CLI sends only the query and structured applicability fields to `POST /api/v1/context/resolve`. Do not include credentials, raw memory content, or chain-of-thought.
 
 ### Orchestration Starters
 
@@ -652,6 +662,7 @@ All commands support `--json` for machine-readable output.
 | `list_runtime_interventions` / `show_runtime_intervention` | Inspect runtime control requests |
 | `create/ack/complete/fail_runtime_intervention` | Operate intervention lifecycle; requires `--enable-registry-writes` |
 | `list/show/upsert_runtime_state_reference` | Manage safe external state and memory pointers |
+| `list/show/preview_trajectory_evidence_set` | Inspect immutable evidence and preview correlated scope without mutation |
 | `registry_sync_dry_run` / `registry_sync_apply` / `show_registry_sync` | Diff, apply, and inspect registry manifests |
 | `list_work_sessions` / `show_work_session` / `complete_work_session` | Inspect and complete Work Sessions |
 | `list_initiatives` / `show_initiative` | Inspect initiative groupings |

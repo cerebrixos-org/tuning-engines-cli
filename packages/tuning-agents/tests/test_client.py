@@ -55,3 +55,74 @@ def test_user_agent_uses_installed_package_version():
 
     assert client.user_agent.startswith("tuning-agents/")
     assert client.user_agent != "tuning-agents/0.1.0"
+
+
+def test_trajectory_and_asset_helpers_use_control_plane_contract(monkeypatch):
+    FakeHttpClient.calls = []
+    monkeypatch.setattr(httpx, "Client", FakeHttpClient)
+    client = TuningClient(api_key="sk-te-inference-test", api_url="https://app.example.test")
+
+    client.list_ai_system_assets(asset_type="agent", limit=25)
+    client.freeze_evidence_set(initiative_id="ini_1", work_item_ids=["wis_1"])
+    client.preview_evidence_set(initiative_id="ini_1", work_item_ids=["wis_1"])
+    client.start_intelligence_run(
+        initiative_id="ini_1", run_type="trajectory_comparison", evidence_set_id="evs_1"
+    )
+
+    assert FakeHttpClient.calls[0][0:2] == (
+        "GET", "https://app.example.test/api/v1/ai-system-assets?asset_type=agent&limit=25"
+    )
+    assert FakeHttpClient.calls[1][0:2] == ("POST", "https://app.example.test/api/v1/evidence-sets")
+    assert FakeHttpClient.calls[2][0:2] == ("POST", "https://app.example.test/api/v1/evidence-sets/preview")
+    assert FakeHttpClient.calls[3][0:2] == ("POST", "https://app.example.test/api/v1/intelligence-runs")
+
+
+def test_context_asset_draft_and_activation_are_separate(monkeypatch):
+    FakeHttpClient.calls = []
+    monkeypatch.setattr(httpx, "Client", FakeHttpClient)
+    client = TuningClient(api_key="sk-te-inference-test", api_url="https://app.example.test")
+
+    client.create_context_asset_draft({"name": "Runbook", "context_type": "procedure"})
+    client.review_context_asset("ctx_1", version_id="ctxv_1")
+    client.activate_context_asset("ctx_1", version_id="ctxv_1")
+
+    assert FakeHttpClient.calls[0][0:2] == ("POST", "https://app.example.test/api/v1/context-assets")
+    assert FakeHttpClient.calls[1][0:2] == (
+        "POST", "https://app.example.test/api/v1/context-assets/ctx_1/review"
+    )
+    assert FakeHttpClient.calls[2][0:2] == (
+        "POST", "https://app.example.test/api/v1/context-assets/ctx_1/activate"
+    )
+
+
+def test_selection_rules_and_context_feedback_use_control_plane_contract(monkeypatch):
+    FakeHttpClient.calls = []
+    monkeypatch.setattr(httpx, "Client", FakeHttpClient)
+    client = TuningClient(api_key="sk-te-inference-test", api_url="https://app.example.test")
+    client.create_trajectory_selection_rule({"initiative_id": "ini_1", "name": "Winners", "filters": {}})
+    client.preview_trajectory_selection_rule("tsr_1")
+    client.freeze_trajectory_selection_rule("tsr_1", name="Winners v1")
+    client.record_context_use(event_type="accepted", receipt_id="ctxr_1", run_id="run_1")
+
+    assert FakeHttpClient.calls[0][0:2] == ("POST", "https://app.example.test/api/v1/trajectory-selection-rules")
+    assert FakeHttpClient.calls[1][0:2] == ("POST", "https://app.example.test/api/v1/trajectory-selection-rules/tsr_1/preview")
+    assert FakeHttpClient.calls[2][0:2] == ("POST", "https://app.example.test/api/v1/trajectory-selection-rules/tsr_1/freeze")
+    assert FakeHttpClient.calls[3][0:2] == ("POST", "https://app.example.test/api/v1/context/uses")
+
+
+def test_comparison_studies_use_versioned_control_plane_contract(monkeypatch):
+    FakeHttpClient.calls = []
+    monkeypatch.setattr(httpx, "Client", FakeHttpClient)
+    client = TuningClient(api_key="sk-te-inference-test", api_url="https://app.example.test")
+
+    client.list_comparison_studies(limit=25)
+    client.create_comparison_study({"initiative_id": "ini_1", "name": "Models", "variants": []})
+    client.update_comparison_study("cmp_1", {"name": "Models v2"})
+    client.run_comparison_study("cmp_1")
+    client.get_comparison_study("cmp_1")
+
+    assert FakeHttpClient.calls[0][0:2] == ("GET", "https://app.example.test/api/v1/comparison-studies?limit=25")
+    assert FakeHttpClient.calls[1][0:2] == ("POST", "https://app.example.test/api/v1/comparison-studies")
+    assert FakeHttpClient.calls[2][0:2] == ("PATCH", "https://app.example.test/api/v1/comparison-studies/cmp_1")
+    assert FakeHttpClient.calls[3][0:2] == ("POST", "https://app.example.test/api/v1/comparison-studies/cmp_1/run")
+    assert FakeHttpClient.calls[4][0:2] == ("GET", "https://app.example.test/api/v1/comparison-studies/cmp_1")

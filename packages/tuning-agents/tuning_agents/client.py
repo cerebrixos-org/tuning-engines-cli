@@ -469,6 +469,237 @@ class TuningClient:
         query = urlencode({key: value for key, value in params.items() if value})
         return self.request("GET", f"/api/v1/runtime_state_references?{query}", trace_type="control")
 
+    def resolve_context(
+        self,
+        query: str,
+        *,
+        context_asset_ids: list[str] | None = None,
+        goal_key: str | None = None,
+        entities: list[str] | None = None,
+        action: str | None = None,
+        sensitivity: str | None = None,
+        request_id: str | None = None,
+        run_id: str | None = None,
+    ) -> Any:
+        payload = {
+            "query": query,
+            "context_asset_ids": context_asset_ids,
+            "goal_key": goal_key,
+            "entities": entities,
+            "action": action,
+            "sensitivity": sensitivity,
+            "request_id": request_id or self.trace.new_request_id(),
+            "run_id": run_id or self.trace.run_id,
+        }
+        return self.request(
+            "POST", "/api/v1/context/resolve",
+            json={key: value for key, value in payload.items() if value is not None},
+            trace_type="context.resolve",
+        )
+
+    async def aresolve_context(self, query: str, **kwargs: Any) -> Any:
+        payload = {"query": query, **kwargs}
+        payload.setdefault("request_id", self.trace.new_request_id())
+        payload.setdefault("run_id", self.trace.run_id)
+        return await self.arequest("POST", "/api/v1/context/resolve", json=payload, trace_type="context.resolve")
+
+    def record_context_use(
+        self,
+        *,
+        event_type: str,
+        receipt_id: str | None = None,
+        mode: str = "suggest",
+        request_id: str | None = None,
+        run_id: str | None = None,
+        goal_key: str | None = None,
+        asset_ids: list[str] | None = None,
+        version_ids: list[str] | None = None,
+        outcome_key: str | None = None,
+        outcome_status: str | None = None,
+        details: Mapping[str, Any] | None = None,
+    ) -> Any:
+        payload = {
+            "event_type": event_type, "receipt_id": receipt_id, "mode": mode,
+            "request_id": request_id, "run_id": run_id or self.trace.run_id, "goal_key": goal_key,
+            "asset_ids": asset_ids, "version_ids": version_ids, "outcome_key": outcome_key,
+            "outcome_status": outcome_status, "details": dict(details or {}),
+        }
+        return self.request(
+            "POST", "/api/v1/context/uses",
+            json={key: value for key, value in payload.items() if value is not None},
+            trace_type="context.use",
+        )
+
+    def list_ai_system_assets(
+        self,
+        *,
+        asset_type: str | None = None,
+        source_system: str | None = None,
+        lifecycle_state: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> Any:
+        params = {
+            "asset_type": asset_type,
+            "source_system": source_system,
+            "lifecycle_state": lifecycle_state,
+            "limit": limit,
+            "offset": offset,
+        }
+        query = urlencode({key: value for key, value in params.items() if value is not None})
+        return self.request("GET", f"/api/v1/ai-system-assets{f'?{query}' if query else ''}", trace_type="control")
+
+    def get_ai_system_asset(self, asset_id: str) -> Any:
+        return self.request("GET", f"/api/v1/ai-system-assets/{asset_id}", trace_type="control")
+
+    def list_evidence_sets(
+        self,
+        *,
+        initiative_id: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> Any:
+        params = {"initiative_id": initiative_id, "limit": limit, "offset": offset}
+        query = urlencode({key: value for key, value in params.items() if value is not None})
+        return self.request("GET", f"/api/v1/evidence-sets{f'?{query}' if query else ''}", trace_type="control")
+
+    def get_evidence_set(self, evidence_set_id: str) -> Any:
+        return self.request("GET", f"/api/v1/evidence-sets/{evidence_set_id}", trace_type="control")
+
+    def freeze_evidence_set(
+        self,
+        *,
+        initiative_id: str,
+        work_item_ids: list[str],
+        name: str | None = None,
+        filter_snapshot: Mapping[str, Any] | None = None,
+    ) -> Any:
+        return self.request(
+            "POST",
+            "/api/v1/evidence-sets",
+            json={
+                "initiative_id": initiative_id,
+                "work_item_ids": work_item_ids,
+                "name": name,
+                "filter_snapshot": dict(filter_snapshot or {}),
+            },
+            trace_type="control",
+        )
+
+    def preview_evidence_set(self, *, initiative_id: str, work_item_ids: list[str]) -> Any:
+        return self.request(
+            "POST",
+            "/api/v1/evidence-sets/preview",
+            json={"initiative_id": initiative_id, "work_item_ids": work_item_ids},
+            trace_type="control",
+        )
+
+    def list_trajectory_selection_rules(self, *, initiative_id: str | None = None) -> Any:
+        query = urlencode({"initiative_id": initiative_id}) if initiative_id else ""
+        return self.request("GET", f"/api/v1/trajectory-selection-rules{f'?{query}' if query else ''}", trace_type="control")
+
+    def create_trajectory_selection_rule(self, rule: Mapping[str, Any]) -> Any:
+        return self.request("POST", "/api/v1/trajectory-selection-rules", json=dict(rule), trace_type="control")
+
+    def preview_trajectory_selection_rule(self, rule_id: str) -> Any:
+        return self.request("POST", f"/api/v1/trajectory-selection-rules/{rule_id}/preview", json={}, trace_type="control")
+
+    def freeze_trajectory_selection_rule(self, rule_id: str, *, name: str | None = None) -> Any:
+        return self.request("POST", f"/api/v1/trajectory-selection-rules/{rule_id}/freeze", json={"name": name}, trace_type="control")
+
+    def list_intelligence_runs(
+        self,
+        *,
+        run_type: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> Any:
+        params = {"run_type": run_type, "status": status, "limit": limit, "offset": offset}
+        query = urlencode({key: value for key, value in params.items() if value is not None})
+        return self.request("GET", f"/api/v1/intelligence-runs{f'?{query}' if query else ''}", trace_type="control")
+
+    def get_intelligence_run(self, run_id: str) -> Any:
+        return self.request("GET", f"/api/v1/intelligence-runs/{run_id}", trace_type="control")
+
+    def start_intelligence_run(
+        self,
+        *,
+        initiative_id: str,
+        run_type: str,
+        evidence_set_id: str | None = None,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> Any:
+        return self.request(
+            "POST",
+            "/api/v1/intelligence-runs",
+            json={
+                "initiative_id": initiative_id,
+                "run_type": run_type,
+                "evidence_set_id": evidence_set_id,
+                "parameters": dict(parameters or {}),
+            },
+            trace_type="control",
+        )
+
+    def list_comparison_studies(self, *, limit: int | None = None, offset: int | None = None) -> Any:
+        query = urlencode({key: value for key, value in {"limit": limit, "offset": offset}.items() if value is not None})
+        return self.request("GET", f"/api/v1/comparison-studies{f'?{query}' if query else ''}", trace_type="control")
+
+    def get_comparison_study(self, study_id: str) -> Any:
+        return self.request("GET", f"/api/v1/comparison-studies/{study_id}", trace_type="control")
+
+    def create_comparison_study(self, payload: Mapping[str, Any]) -> Any:
+        return self.request("POST", "/api/v1/comparison-studies", json=dict(payload), trace_type="control")
+
+    def update_comparison_study(self, study_id: str, payload: Mapping[str, Any]) -> Any:
+        return self.request("PATCH", f"/api/v1/comparison-studies/{study_id}", json=dict(payload), trace_type="control")
+
+    def run_comparison_study(self, study_id: str) -> Any:
+        return self.request("POST", f"/api/v1/comparison-studies/{study_id}/run", json={}, trace_type="control")
+
+    def list_context_assets(
+        self,
+        *,
+        context_type: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> Any:
+        params = {"context_type": context_type, "status": status, "limit": limit, "offset": offset}
+        query = urlencode({key: value for key, value in params.items() if value is not None})
+        return self.request("GET", f"/api/v1/context-assets{f'?{query}' if query else ''}", trace_type="control")
+
+    def get_context_asset(self, context_asset_id: str) -> Any:
+        return self.request("GET", f"/api/v1/context-assets/{context_asset_id}", trace_type="control")
+
+    def create_context_asset_draft(self, asset: Mapping[str, Any]) -> Any:
+        """Create a reviewable draft. This method never activates context."""
+        return self.request("POST", "/api/v1/context-assets", json=dict(asset), trace_type="control")
+
+    def review_context_asset(
+        self,
+        context_asset_id: str,
+        *,
+        version_id: str,
+        validation_packet: Mapping[str, Any] | None = None,
+    ) -> Any:
+        return self.request(
+            "POST",
+            f"/api/v1/context-assets/{context_asset_id}/review",
+            json={"version_id": version_id, "validation_packet": dict(validation_packet or {})},
+            trace_type="control",
+        )
+
+    def activate_context_asset(self, context_asset_id: str, *, version_id: str) -> Any:
+        """Explicitly activate a reviewed version; server-side role and release gates still apply."""
+        return self.request(
+            "POST",
+            f"/api/v1/context-assets/{context_asset_id}/activate",
+            json={"version_id": version_id},
+            trace_type="control",
+        )
+
     def new_run_id(self, prefix: str = "run") -> str:
         return f"{prefix}_{uuid.uuid4().hex}"
 
