@@ -613,6 +613,20 @@ class TuningClient:
         """Create a reviewable draft. This method never activates context."""
         return self.request("POST", "/api/v1/context-assets", json=dict(asset), trace_type="control")
 
+    def review_context_asset(
+        self,
+        context_asset_id: str,
+        *,
+        version_id: str,
+        validation_packet: Mapping[str, Any] | None = None,
+    ) -> Any:
+        return self.request(
+            "POST",
+            f"/api/v1/context-assets/{context_asset_id}/review",
+            json={"version_id": version_id, "validation_packet": dict(validation_packet or {})},
+            trace_type="control",
+        )
+
     def activate_context_asset(self, context_asset_id: str, *, version_id: str) -> Any:
         """Explicitly activate a reviewed version; server-side role and release gates still apply."""
         return self.request(

@@ -106,6 +106,10 @@ draft = client.create_context_asset_draft({
     "context_type": "procedure",
     "structured_units": [{"step": "Verify the affected service"}],
 })
+client.review_context_asset(
+    draft["context_asset"]["public_id"],
+    version_id=draft["context_asset"]["versions"][0]["public_id"],
+)
 client.activate_context_asset(
     draft["context_asset"]["public_id"],
     version_id=draft["context_asset"]["versions"][0]["public_id"],

@@ -317,6 +317,7 @@ export declare class TuningEnginesClient {
     }): Promise<any>;
     getContextAsset(id: string): Promise<any>;
     createContextAsset(params: Record<string, any>): Promise<any>;
+    reviewContextAsset(id: string, versionId: string, validationPacket?: Record<string, any>): Promise<any>;
     activateContextAsset(id: string, versionId: string): Promise<any>;
     dryRunRegistrySync(manifest: Record<string, any>): Promise<any>;
     applyRegistrySync(manifest: Record<string, any>): Promise<any>;

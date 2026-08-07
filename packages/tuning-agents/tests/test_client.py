@@ -81,9 +81,13 @@ def test_context_asset_draft_and_activation_are_separate(monkeypatch):
     client = TuningClient(api_key="sk-te-inference-test", api_url="https://app.example.test")
 
     client.create_context_asset_draft({"name": "Runbook", "context_type": "procedure"})
+    client.review_context_asset("ctx_1", version_id="ctxv_1")
     client.activate_context_asset("ctx_1", version_id="ctxv_1")
 
     assert FakeHttpClient.calls[0][0:2] == ("POST", "https://app.example.test/api/v1/context-assets")
     assert FakeHttpClient.calls[1][0:2] == (
+        "POST", "https://app.example.test/api/v1/context-assets/ctx_1/review"
+    )
+    assert FakeHttpClient.calls[2][0:2] == (
         "POST", "https://app.example.test/api/v1/context-assets/ctx_1/activate"
     )

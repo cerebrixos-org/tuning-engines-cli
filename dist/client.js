@@ -537,6 +537,12 @@ class TuningEnginesClient {
     async createContextAsset(params) {
         return this.request("POST", "/api/v1/context-assets", params);
     }
+    async reviewContextAsset(id, versionId, validationPacket = {}) {
+        return this.request("POST", `/api/v1/context-assets/${encodeURIComponent(id)}/review`, {
+            version_id: versionId,
+            validation_packet: validationPacket,
+        });
+    }
     async activateContextAsset(id, versionId) {
         return this.request("POST", `/api/v1/context-assets/${encodeURIComponent(id)}/activate`, { version_id: versionId });
     }

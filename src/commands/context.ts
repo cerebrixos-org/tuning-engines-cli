@@ -70,6 +70,14 @@ export function registerContextCommands(program: Command, getClient: () => Tunin
     .description("Explicitly activate one reviewed context version")
     .requiredOption("--version <id>", "Context version public ID")
     .action(async (id: string, opts) => output.json(await getClient().activateContextAsset(id, opts.version)));
+
+  assets.command("review <id>")
+    .description("Review a draft version; deterministic candidates require an evidence-backed validation packet")
+    .requiredOption("--version <id>", "Context version public ID")
+    .option("--validation-packet <json>", "Replay/shadow/canary/deviation/rollback/compensation results")
+    .action(async (id: string, opts) => output.json(await getClient().reviewContextAsset(
+      id, opts.version, parseObject(opts.validationPacket || "{}"),
+    )));
 }
 
 function parseObject(raw: string): Record<string, any> {

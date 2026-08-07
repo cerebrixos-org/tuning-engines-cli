@@ -510,6 +510,18 @@ function runtimeAndGovernanceTools(allowRegistryWrites = false) {
                 },
             },
             {
+                name: "review_context_asset",
+                description: "Review a context draft. Deterministic candidates require evidence-backed release gates. Requires --enable-registry-writes.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        id: { type: "string" }, version_id: { type: "string" },
+                        validation_packet: { type: "object" },
+                    },
+                    required: ["id", "version_id"],
+                },
+            },
+            {
                 name: "activate_context_asset",
                 description: "Explicitly activate one reviewed context version. Requires --enable-registry-writes.",
                 inputSchema: {
@@ -2037,6 +2049,15 @@ async function startMcpServer(options = {}) {
                         throw new Error("Context writes are disabled. Start MCP with --enable-registry-writes.");
                     result = await getClient().activateContextAsset(String(args.id), String(args.version_id));
                     break;
+                case "review_context_asset": {
+                    if (!allowRegistryWrites)
+                        throw new Error("Context writes are disabled. Start MCP with --enable-registry-writes.");
+                    const packet = (args?.validation_packet || {});
+                    if (hasBlockedSecretField(packet))
+                        throw new Error("Context validation packets may not contain secrets.");
+                    result = await getClient().reviewContextAsset(String(args.id), String(args.version_id), packet);
+                    break;
+                }
                 case "registry_sync_dry_run": {
                     const manifest = parseDataObject(args?.manifest, "manifest");
                     if (hasBlockedSecretField(manifest))
