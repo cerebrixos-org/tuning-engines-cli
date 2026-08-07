@@ -503,6 +503,33 @@ class TuningClient:
         payload.setdefault("run_id", self.trace.run_id)
         return await self.arequest("POST", "/api/v1/context/resolve", json=payload, trace_type="context.resolve")
 
+    def record_context_use(
+        self,
+        *,
+        event_type: str,
+        receipt_id: str | None = None,
+        mode: str = "suggest",
+        request_id: str | None = None,
+        run_id: str | None = None,
+        goal_key: str | None = None,
+        asset_ids: list[str] | None = None,
+        version_ids: list[str] | None = None,
+        outcome_key: str | None = None,
+        outcome_status: str | None = None,
+        details: Mapping[str, Any] | None = None,
+    ) -> Any:
+        payload = {
+            "event_type": event_type, "receipt_id": receipt_id, "mode": mode,
+            "request_id": request_id, "run_id": run_id or self.trace.run_id, "goal_key": goal_key,
+            "asset_ids": asset_ids, "version_ids": version_ids, "outcome_key": outcome_key,
+            "outcome_status": outcome_status, "details": dict(details or {}),
+        }
+        return self.request(
+            "POST", "/api/v1/context/uses",
+            json={key: value for key, value in payload.items() if value is not None},
+            trace_type="context.use",
+        )
+
     def list_ai_system_assets(
         self,
         *,
@@ -566,6 +593,19 @@ class TuningClient:
             json={"initiative_id": initiative_id, "work_item_ids": work_item_ids},
             trace_type="control",
         )
+
+    def list_trajectory_selection_rules(self, *, initiative_id: str | None = None) -> Any:
+        query = urlencode({"initiative_id": initiative_id}) if initiative_id else ""
+        return self.request("GET", f"/api/v1/trajectory-selection-rules{f'?{query}' if query else ''}", trace_type="control")
+
+    def create_trajectory_selection_rule(self, rule: Mapping[str, Any]) -> Any:
+        return self.request("POST", "/api/v1/trajectory-selection-rules", json=dict(rule), trace_type="control")
+
+    def preview_trajectory_selection_rule(self, rule_id: str) -> Any:
+        return self.request("POST", f"/api/v1/trajectory-selection-rules/{rule_id}/preview", json={}, trace_type="control")
+
+    def freeze_trajectory_selection_rule(self, rule_id: str, *, name: str | None = None) -> Any:
+        return self.request("POST", f"/api/v1/trajectory-selection-rules/{rule_id}/freeze", json={"name": name}, trace_type="control")
 
     def list_intelligence_runs(
         self,

@@ -502,6 +502,25 @@ class TuningEnginesClient {
     async previewEvidenceSet(params) {
         return this.request("POST", "/api/v1/evidence-sets/preview", params);
     }
+    async listTrajectorySelectionRules(options) {
+        const params = new URLSearchParams();
+        if (options?.initiativeId)
+            params.set("initiative_id", options.initiativeId);
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/trajectory-selection-rules${qs ? `?${qs}` : ""}`);
+    }
+    async createTrajectorySelectionRule(params) {
+        return this.request("POST", "/api/v1/trajectory-selection-rules", params);
+    }
+    async previewTrajectorySelectionRule(id) {
+        return this.request("POST", `/api/v1/trajectory-selection-rules/${encodeURIComponent(id)}/preview`, {});
+    }
+    async freezeTrajectorySelectionRule(id, name) {
+        return this.request("POST", `/api/v1/trajectory-selection-rules/${encodeURIComponent(id)}/freeze`, { name });
+    }
+    async recordContextUse(params) {
+        return this.request("POST", "/api/v1/context/uses", params);
+    }
     async listIntelligenceRuns(options) {
         const params = new URLSearchParams();
         if (options?.runType)

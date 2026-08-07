@@ -116,6 +116,22 @@ client.activate_context_asset(
 )
 ```
 
+Saved selection rules can build repeatable candidate pools without bypassing tenant authorization. Preview first, then freeze an immutable evidence version:
+
+```python
+rule = client.create_trajectory_selection_rule({
+    "initiative_id": "ini_...",
+    "name": "Successful checkout repairs",
+    "selection_mode": "hybrid",
+    "evidence_role": "positive",
+    "filters": {"goal_keys": ["checkout_reliability"], "statuses": ["succeeded"]},
+})
+client.preview_trajectory_selection_rule(rule["selection_rule"]["id"])
+client.freeze_trajectory_selection_rule(rule["selection_rule"]["id"])
+```
+
+After a runtime receives context, it can asynchronously record whether the context was accepted, rejected, or deviated from, and later attach an outcome. Send IDs and bounded reason metadata only; never send raw prompts, memory content, or credentials.
+
 The server rechecks tenant scope, role permissions, review state, and release
 gates. The SDK never stores raw prompts, memory content, credentials, or
 chain-of-thought in an asset or evidence-set helper.

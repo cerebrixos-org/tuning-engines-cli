@@ -697,6 +697,29 @@ export class TuningEnginesClient {
     return this.request("POST", "/api/v1/evidence-sets/preview", params);
   }
 
+  async listTrajectorySelectionRules(options?: { initiativeId?: string }): Promise<any> {
+    const params = new URLSearchParams();
+    if (options?.initiativeId) params.set("initiative_id", options.initiativeId);
+    const qs = params.toString();
+    return this.request("GET", `/api/v1/trajectory-selection-rules${qs ? `?${qs}` : ""}`);
+  }
+
+  async createTrajectorySelectionRule(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/trajectory-selection-rules", params);
+  }
+
+  async previewTrajectorySelectionRule(id: string): Promise<any> {
+    return this.request("POST", `/api/v1/trajectory-selection-rules/${encodeURIComponent(id)}/preview`, {});
+  }
+
+  async freezeTrajectorySelectionRule(id: string, name?: string): Promise<any> {
+    return this.request("POST", `/api/v1/trajectory-selection-rules/${encodeURIComponent(id)}/freeze`, { name });
+  }
+
+  async recordContextUse(params: Record<string, any>): Promise<any> {
+    return this.request("POST", "/api/v1/context/uses", params);
+  }
+
   async listIntelligenceRuns(options?: { runType?: string; status?: string; limit?: number; offset?: number }): Promise<any> {
     const params = new URLSearchParams();
     if (options?.runType) params.set("run_type", options.runType);

@@ -325,6 +325,16 @@ function runtimeAndGovernanceTools(allowRegistryWrites = false): ToolDefinition[
       },
     },
     {
+      name: "list_trajectory_selection_rules",
+      description: "List safe saved source-selection rules for Trajectory Studio.",
+      inputSchema: { type: "object", properties: { initiative_id: { type: "string" } } },
+    },
+    {
+      name: "preview_trajectory_selection_rule",
+      description: "Preview authorized Work Sessions selected by a saved rule without freezing evidence.",
+      inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    },
+    {
       name: "list_intelligence_runs",
       description: "List reproducible trajectory intelligence executions and their version/status metadata.",
       inputSchema: { type: "object", properties: { run_type: { type: "string" }, status: { type: "string" }, limit: { type: "number" }, offset: { type: "number" } } },
@@ -517,6 +527,21 @@ function runtimeAndGovernanceTools(allowRegistryWrites = false): ToolDefinition[
           },
           required: ["initiative_id", "work_item_ids"],
         },
+      },
+      {
+        name: "create_trajectory_selection_rule",
+        description: "Create a bounded, secret-free source-selection rule. Requires --enable-registry-writes.",
+        inputSchema: { type: "object", properties: { data: { type: "object", additionalProperties: true } }, required: ["data"] },
+      },
+      {
+        name: "freeze_trajectory_selection_rule",
+        description: "Freeze the current authorized candidates from a saved rule. Requires --enable-registry-writes.",
+        inputSchema: { type: "object", properties: { id: { type: "string" }, name: { type: "string" } }, required: ["id"] },
+      },
+      {
+        name: "record_context_use",
+        description: "Record context acceptance, rejection, deviation, or outcome without raw prompts or memory content. Requires --enable-registry-writes.",
+        inputSchema: { type: "object", properties: { data: { type: "object", additionalProperties: true } }, required: ["data"] },
       },
       {
         name: "start_intelligence_run",
@@ -2139,6 +2164,14 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
           });
           break;
 
+        case "list_trajectory_selection_rules":
+          result = await getClient().listTrajectorySelectionRules({ initiativeId: args?.initiative_id as string | undefined });
+          break;
+
+        case "preview_trajectory_selection_rule":
+          result = await getClient().previewTrajectorySelectionRule(String(args!.id));
+          break;
+
         case "list_intelligence_runs":
           result = await getClient().listIntelligenceRuns({
             runType: args?.run_type as string | undefined,
@@ -2183,6 +2216,27 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
           };
           if (hasBlockedSecretField(data)) throw new Error("Evidence metadata may not contain secrets.");
           result = await getClient().createEvidenceSet(data);
+          break;
+        }
+
+        case "create_trajectory_selection_rule": {
+          if (!allowRegistryWrites) throw new Error("Trajectory writes are disabled. Start MCP with --enable-registry-writes.");
+          const data = parseDataObject(args?.data);
+          if (hasBlockedSecretField(data)) throw new Error("Selection rules may not contain secrets.");
+          result = await getClient().createTrajectorySelectionRule(data);
+          break;
+        }
+
+        case "freeze_trajectory_selection_rule":
+          if (!allowRegistryWrites) throw new Error("Trajectory writes are disabled. Start MCP with --enable-registry-writes.");
+          result = await getClient().freezeTrajectorySelectionRule(String(args!.id), args?.name as string | undefined);
+          break;
+
+        case "record_context_use": {
+          if (!allowRegistryWrites) throw new Error("Context writes are disabled. Start MCP with --enable-registry-writes.");
+          const data = parseDataObject(args?.data);
+          if (hasBlockedSecretField(data)) throw new Error("Context-use receipts may not contain secrets or raw content.");
+          result = await getClient().recordContextUse(data);
           break;
         }
 

@@ -300,6 +300,13 @@ export declare class TuningEnginesClient {
         initiative_id: string;
         work_item_ids: string[];
     }): Promise<any>;
+    listTrajectorySelectionRules(options?: {
+        initiativeId?: string;
+    }): Promise<any>;
+    createTrajectorySelectionRule(params: Record<string, any>): Promise<any>;
+    previewTrajectorySelectionRule(id: string): Promise<any>;
+    freezeTrajectorySelectionRule(id: string, name?: string): Promise<any>;
+    recordContextUse(params: Record<string, any>): Promise<any>;
     listIntelligenceRuns(options?: {
         runType?: string;
         status?: string;

@@ -93,3 +93,18 @@ def test_context_asset_draft_and_activation_are_separate(monkeypatch):
     assert FakeHttpClient.calls[2][0:2] == (
         "POST", "https://app.example.test/api/v1/context-assets/ctx_1/activate"
     )
+
+
+def test_selection_rules_and_context_feedback_use_control_plane_contract(monkeypatch):
+    FakeHttpClient.calls = []
+    monkeypatch.setattr(httpx, "Client", FakeHttpClient)
+    client = TuningClient(api_key="sk-te-inference-test", api_url="https://app.example.test")
+    client.create_trajectory_selection_rule({"initiative_id": "ini_1", "name": "Winners", "filters": {}})
+    client.preview_trajectory_selection_rule("tsr_1")
+    client.freeze_trajectory_selection_rule("tsr_1", name="Winners v1")
+    client.record_context_use(event_type="accepted", receipt_id="ctxr_1", run_id="run_1")
+
+    assert FakeHttpClient.calls[0][0:2] == ("POST", "https://app.example.test/api/v1/trajectory-selection-rules")
+    assert FakeHttpClient.calls[1][0:2] == ("POST", "https://app.example.test/api/v1/trajectory-selection-rules/tsr_1/preview")
+    assert FakeHttpClient.calls[2][0:2] == ("POST", "https://app.example.test/api/v1/trajectory-selection-rules/tsr_1/freeze")
+    assert FakeHttpClient.calls[3][0:2] == ("POST", "https://app.example.test/api/v1/context/uses")

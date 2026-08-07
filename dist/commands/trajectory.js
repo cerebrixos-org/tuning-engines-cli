@@ -38,6 +38,28 @@ const output = __importStar(require("../output"));
 function registerTrajectoryCommands(program, getClient) {
     const trajectory = program.command("trajectory").description("Curate immutable evidence and run trajectory intelligence");
     const evidence = trajectory.command("evidence").description("Manage immutable Initiative evidence sets");
+    const rules = trajectory.command("rules").description("Manage saved, versioned source-selection rules");
+    rules.command("list")
+        .option("--initiative <id>", "Initiative public ID")
+        .action(async (opts) => output.json(await getClient().listTrajectorySelectionRules({ initiativeId: opts.initiative })));
+    rules.command("create")
+        .requiredOption("--initiative <id>", "Initiative public ID")
+        .requiredOption("--name <name>", "Rule name")
+        .option("--mode <mode>", "rule, ai_ranked, hybrid, or continuous", "rule")
+        .option("--role <role>", "positive, negative, comparison, context, exception, or validation", "context")
+        .option("--filters <json>", "Safe source filters", "{}")
+        .option("--limit <n>", "Candidate limit", "250")
+        .option("--refresh-minutes <n>", "Continuous refresh interval")
+        .action(async (opts) => output.json(await getClient().createTrajectorySelectionRule({
+        initiative_id: opts.initiative, name: opts.name, selection_mode: opts.mode,
+        evidence_role: opts.role, filters: parseObject(opts.filters), candidate_limit: Number(opts.limit),
+        refresh_interval_minutes: opts.refreshMinutes ? Number(opts.refreshMinutes) : undefined,
+    })));
+    rules.command("preview <id>")
+        .action(async (id) => output.json(await getClient().previewTrajectorySelectionRule(id)));
+    rules.command("freeze <id>")
+        .option("--name <name>", "Evidence snapshot name")
+        .action(async (id, opts) => output.json(await getClient().freezeTrajectorySelectionRule(id, opts.name)));
     evidence.command("list")
         .option("--initiative <id>", "Initiative public ID")
         .option("-l, --limit <n>", "Max results", "50")
@@ -78,7 +100,7 @@ function registerTrajectoryCommands(program, getClient) {
     runs.command("start")
         .description("Queue a versioned intelligence run; generated opportunities remain review-only")
         .requiredOption("--initiative <id>", "Initiative public ID")
-        .requiredOption("--type <type>", "opportunity_scan, outcome_analysis, asset_evaluation, or trajectory_comparison")
+        .requiredOption("--type <type>", "opportunity_scan, outcome_analysis, asset_evaluation, trajectory_comparison, trajectory_analysis, context_extraction, output_generation, or validation")
         .option("--evidence-set <id>", "Frozen evidence set public ID")
         .option("--parameters <json>", "Safe bounded run parameters")
         .action(async (opts) => output.json(await getClient().createIntelligenceRun({

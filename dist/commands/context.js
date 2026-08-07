@@ -69,6 +69,25 @@ function registerContextCommands(program, getClient) {
             process.exit(1);
         }
     });
+    context.command("record-use")
+        .description("Record accepted, rejected, deviated, or outcome feedback for resolved context")
+        .requiredOption("--event <type>", "accepted, rejected, deviated, or outcome")
+        .option("--receipt <id>", "Resolution receipt ID")
+        .option("--mode <mode>", "Context mode", "suggest")
+        .option("--request-id <id>", "Request correlation ID")
+        .option("--run-id <id>", "Run correlation ID")
+        .option("--goal-key <key>", "Goal key")
+        .option("--asset <id...>", "Context asset IDs")
+        .option("--version <id...>", "Context version IDs")
+        .option("--outcome-key <key>", "Outcome key")
+        .option("--outcome-status <status>", "succeeded, failed, or unknown")
+        .option("--details <json>", "Safe bounded feedback details", "{}")
+        .action(async (opts) => output.json(await getClient().recordContextUse({
+        receipt_id: opts.receipt, event_type: opts.event, mode: opts.mode,
+        request_id: opts.requestId, run_id: opts.runId, goal_key: opts.goalKey,
+        asset_ids: opts.asset, version_ids: opts.version, outcome_key: opts.outcomeKey,
+        outcome_status: opts.outcomeStatus, details: parseObject(opts.details),
+    })));
     const assets = context.command("assets").description("Manage reviewed, versioned context assets");
     assets.command("list")
         .option("--type <type>", "Context type")
