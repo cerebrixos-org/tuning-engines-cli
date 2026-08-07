@@ -459,10 +459,13 @@ patterns.
 | `te approvals deny <id>` | Deny a pending request |
 | `te interventions list/show/request/ack/complete/fail` | Manage runtime pause, resume, cancel, and replay requests |
 | `te state list/show/upsert` | Manage safe external workflow-state and memory references |
+| `te context resolve '<query>' --goal-key <key>` | Resolve authorized versioned context; observe mode records lineage without changing execution |
 | `te registry sync --file tuning-registry.yml --dry-run/--apply` | Diff or apply agent, skill, and MCP registry manifests |
 | `te registry show <id>` | Inspect an applied registry sync |
 | `te work-sessions list/show/complete/confirm-outcome` | Inspect and update Work Sessions |
 | `te initiatives list/show/create/update` | Manage strategic initiative groupings |
+
+Context assets are reviewed immutable versions; MCP context sources remain external connectors. The CLI sends only the query and structured applicability fields to `POST /api/v1/context/resolve`. Do not include credentials, raw memory content, or chain-of-thought.
 
 ### Orchestration Starters
 

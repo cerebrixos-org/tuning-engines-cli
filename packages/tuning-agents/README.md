@@ -139,6 +139,11 @@ interventions, model catalog lookups, usage lookups, and external state
 references. Temporal owns durability; Tuning Engines owns governance, policy,
 usage, traces, approvals, and cost controls.
 
+Both LangGraph and Temporal adapters can resolve governed context. In `observe`
+mode the API records asset/version match lineage and latency but returns no
+context units, so workflow behavior is unchanged. Temporal performs resolution
+inside `resolve_context_activity`, never in deterministic workflow code.
+
 The base Temporal plugin is deliberately a primitives plugin. Its built-in
 workflow is a minimal starter, not a canonical agent brain. If you need ReAct
 behavior parity with the LangGraph adapter, use the separate Temporal ReAct
@@ -168,6 +173,7 @@ plugin = create_tuning_engines_plugin(
         interventions=True,
         model_catalog=True,
         usage=True,
+        context_resolution=True,
     )
 )
 TuningAgentWorkflow = define_temporal_workflow()

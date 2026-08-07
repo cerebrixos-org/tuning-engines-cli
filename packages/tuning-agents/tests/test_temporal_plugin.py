@@ -17,6 +17,7 @@ def test_temporal_feature_flags_default_to_full_control_plane():
     assert "list_usage_activity" in names
     assert "mcp_tool_activity" in names
     assert "agent_message_activity" in names
+    assert "resolve_context_activity" in names
     assert "record_state_reference_activity" in names
     assert "flush_trace_activity" in names
     assert "list_interventions_activity" in names
@@ -37,6 +38,7 @@ def test_temporal_feature_flags_can_scope_worker_capabilities():
         approvals=False,
         model_catalog=False,
         usage=False,
+        context_resolution=False,
         built_in_workflow=False,
     )
 

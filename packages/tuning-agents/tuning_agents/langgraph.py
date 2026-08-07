@@ -6,6 +6,26 @@ from .client import TuningClient
 from .mcp import make_agent_langchain_tools, make_langchain_tools
 
 
+def resolve_governed_context(
+    client: TuningClient,
+    query: str,
+    *,
+    goal_key: str | None = None,
+    thread_id: str | None = None,
+    action: str | None = None,
+) -> dict[str, Any]:
+    """Resolve authorized context before a graph turn.
+
+    In observe mode this records lineage only and returns no context units, so
+    graph behavior is unchanged while relevance and latency are measured.
+    """
+    return client.resolve_context(
+        query, goal_key=goal_key, action=action,
+        run_id=client.trace.run_id,
+        request_id=thread_id or client.trace.new_request_id(),
+    )
+
+
 def create_tuning_langgraph_agent(
     client: TuningClient,
     *,

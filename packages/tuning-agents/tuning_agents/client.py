@@ -469,6 +469,40 @@ class TuningClient:
         query = urlencode({key: value for key, value in params.items() if value})
         return self.request("GET", f"/api/v1/runtime_state_references?{query}", trace_type="control")
 
+    def resolve_context(
+        self,
+        query: str,
+        *,
+        context_asset_ids: list[str] | None = None,
+        goal_key: str | None = None,
+        entities: list[str] | None = None,
+        action: str | None = None,
+        sensitivity: str | None = None,
+        request_id: str | None = None,
+        run_id: str | None = None,
+    ) -> Any:
+        payload = {
+            "query": query,
+            "context_asset_ids": context_asset_ids,
+            "goal_key": goal_key,
+            "entities": entities,
+            "action": action,
+            "sensitivity": sensitivity,
+            "request_id": request_id or self.trace.new_request_id(),
+            "run_id": run_id or self.trace.run_id,
+        }
+        return self.request(
+            "POST", "/api/v1/context/resolve",
+            json={key: value for key, value in payload.items() if value is not None},
+            trace_type="context.resolve",
+        )
+
+    async def aresolve_context(self, query: str, **kwargs: Any) -> Any:
+        payload = {"query": query, **kwargs}
+        payload.setdefault("request_id", self.trace.new_request_id())
+        payload.setdefault("run_id", self.trace.run_id)
+        return await self.arequest("POST", "/api/v1/context/resolve", json=payload, trace_type="context.resolve")
+
     def new_run_id(self, prefix: str = "run") -> str:
         return f"{prefix}_{uuid.uuid4().hex}"
 

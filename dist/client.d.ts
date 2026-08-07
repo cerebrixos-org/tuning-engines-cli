@@ -174,6 +174,16 @@ export declare class TuningEnginesClient {
         offset?: number;
     }): Promise<any>;
     getTrace(runId: string): Promise<any>;
+    resolveContext(params: {
+        query: string;
+        context_asset_ids?: string[];
+        goal_key?: string;
+        entities?: string[];
+        action?: string;
+        sensitivity?: string;
+        request_id?: string;
+        run_id?: string;
+    }): Promise<any>;
     createOutcomeContext(params: {
         title: string;
         outcome_key?: string;

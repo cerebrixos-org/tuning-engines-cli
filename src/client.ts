@@ -411,6 +411,19 @@ export class TuningEnginesClient {
     return this.request("GET", `/api/v1/traces/${encodeURIComponent(runId)}`);
   }
 
+  async resolveContext(params: {
+    query: string;
+    context_asset_ids?: string[];
+    goal_key?: string;
+    entities?: string[];
+    action?: string;
+    sensitivity?: string;
+    request_id?: string;
+    run_id?: string;
+  }): Promise<any> {
+    return this.request("POST", "/api/v1/context/resolve", params);
+  }
+
   async createOutcomeContext(params: { title: string; outcome_key?: string; context_id?: string }): Promise<any> {
     return this.request("POST", "/api/v1/outcome-context", params);
   }

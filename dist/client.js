@@ -281,6 +281,9 @@ class TuningEnginesClient {
     async getTrace(runId) {
         return this.request("GET", `/api/v1/traces/${encodeURIComponent(runId)}`);
     }
+    async resolveContext(params) {
+        return this.request("POST", "/api/v1/context/resolve", params);
+    }
     async createOutcomeContext(params) {
         return this.request("POST", "/api/v1/outcome-context", params);
     }

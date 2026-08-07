@@ -146,6 +146,24 @@ function runtimeAndGovernanceTools(allowRegistryWrites = false) {
             },
         },
         {
+            name: "resolve_governed_context",
+            description: "Resolve authorized, versioned Tuning Engines context for a goal or action. Observe mode returns only match lineage and never changes execution.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    query: { type: "string", description: "Short task or retrieval query; do not include secrets" },
+                    context_asset_ids: { type: "array", items: { type: "string" } },
+                    goal_key: { type: "string" },
+                    entities: { type: "array", items: { type: "string" } },
+                    action: { type: "string" },
+                    sensitivity: { type: "string" },
+                    request_id: { type: "string" },
+                    run_id: { type: "string" },
+                },
+                required: ["query"],
+            },
+        },
+        {
             name: "create_trace",
             description: "Ingest or update a runtime trace. Include run_id/request_id and normalized event types when possible. metadata.decision must contain redacted summaries only. Do not include secrets. Works with a user API token or inference key.",
             inputSchema: {
@@ -1747,6 +1765,23 @@ async function startMcpServer(options = {}) {
                 case "show_trace":
                     result = await getClient().getTrace(args.run_id);
                     break;
+                case "resolve_governed_context": {
+                    const payload = {
+                        query: String(args.query),
+                        context_asset_ids: args?.context_asset_ids,
+                        goal_key: args?.goal_key,
+                        entities: args?.entities,
+                        action: args?.action,
+                        sensitivity: args?.sensitivity,
+                        request_id: args?.request_id,
+                        run_id: args?.run_id,
+                    };
+                    if (hasBlockedSecretField(payload)) {
+                        throw new Error("Context request appears to contain raw secret fields. Remove secrets before resolving context.");
+                    }
+                    result = await getClient().resolveContext(payload);
+                    break;
+                }
                 case "create_trace": {
                     const data = parseDataObject(args?.data);
                     if (hasBlockedSecretField(data)) {

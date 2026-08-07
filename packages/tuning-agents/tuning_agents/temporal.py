@@ -63,6 +63,7 @@ class TuningEnginesTemporalFeatures:
     model_catalog: bool = True
     usage: bool = True
     built_in_workflow: bool = True
+    context_resolution: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,6 +117,22 @@ async def agent_message_activity(payload: dict[str, Any]) -> dict[str, Any]:
         approval_id=payload.get("approval_id"),
     )
     return {"result": result, "trace": client.trace.as_dict()}
+
+
+@_activity_defn
+async def resolve_context_activity(payload: dict[str, Any]) -> dict[str, Any]:
+    """Resolve context in an activity so workflow replay stays deterministic."""
+    client = _client_from_payload(payload)
+    return await client.aresolve_context(
+        payload["query"],
+        context_asset_ids=payload.get("context_asset_ids"),
+        goal_key=payload.get("goal_key"),
+        entities=payload.get("entities"),
+        action=payload.get("action"),
+        sensitivity=payload.get("sensitivity"),
+        request_id=payload.get("request_id"),
+        run_id=payload.get("run_id"),
+    )
 
 
 @_activity_defn
@@ -207,6 +224,8 @@ def tuning_temporal_activities_for(
         activities.append(mcp_tool_activity)
     if features.agents:
         activities.append(agent_message_activity)
+    if features.context_resolution:
+        activities.append(resolve_context_activity)
     if features.state_references:
         activities.append(record_state_reference_activity)
     if features.traces:
@@ -238,6 +257,7 @@ def all_tuning_temporal_activities() -> list[Callable[..., Any]]:
     """
     return [
         chat_completion_activity,
+        resolve_context_activity,
         list_models_activity,
         list_usage_activity,
         mcp_tool_activity,
@@ -285,6 +305,7 @@ def create_tuning_engines_plugin(
                 approvals=config.features.approvals,
                 model_catalog=config.features.model_catalog,
                 usage=config.features.usage,
+                context_resolution=config.features.context_resolution,
                 built_in_workflow=include_workflow,
             ),
         )

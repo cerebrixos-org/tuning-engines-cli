@@ -72,6 +72,7 @@ const user_models_1 = require("./commands/user-models");
 const skills_1 = require("./commands/skills");
 const compliance_1 = require("./commands/compliance");
 const feedback_1 = require("./commands/feedback");
+const context_1 = require("./commands/context");
 const program = new commander_1.Command();
 program
     .name("te")
@@ -99,6 +100,7 @@ const getClient = () => {
 (0, skills_1.registerSkillCommands)(program, getClient);
 (0, compliance_1.registerComplianceCommands)(program, getClient);
 (0, feedback_1.registerFeedbackCommands)(program, getClient);
+(0, context_1.registerContextCommands)(program, getClient);
 (0, tenant_1.registerTenantCommands)(program, getClient);
 (0, approvals_1.registerApprovalCommands)(program, getClient);
 (0, traces_1.registerTraceCommands)(program, getClient);
