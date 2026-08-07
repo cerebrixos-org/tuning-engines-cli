@@ -130,6 +130,22 @@ client.preview_trajectory_selection_rule(rule["selection_rule"]["id"])
 client.freeze_trajectory_selection_rule(rule["selection_rule"]["id"])
 ```
 
+Comparison Studies reuse Work Sessions, outcomes, evaluation profiles, and frozen evidence. Quality remains unmeasured unless a common evaluation profile scored the selected sessions:
+
+```python
+study = client.create_comparison_study({
+    "initiative_id": "ini_...",
+    "name": "Model A versus Model B",
+    "question_type": "model",
+    "variants": [
+        {"key": "a", "label": "Model A", "match": {"field": "model", "operator": "equals", "value": "model-a"}},
+        {"key": "b", "label": "Model B", "match": {"field": "model", "operator": "equals", "value": "model-b"}},
+    ],
+    "metric_config": {"metrics": ["success_rate", "quality_score", "avg_cost_cents", "p95_latency_ms"], "weights": {}, "success_source": "outcome"},
+})
+client.run_comparison_study(study["comparison_study"]["id"])
+```
+
 After a runtime receives context, it can asynchronously record whether the context was accepted, rejected, or deviated from, and later attach an outcome. Send IDs and bounded reason metadata only; never send raw prompts, memory content, or credentials.
 
 The server rechecks tenant scope, role permissions, review state, and release

@@ -340,6 +340,16 @@ function runtimeAndGovernanceTools(allowRegistryWrites = false): ToolDefinition[
       inputSchema: { type: "object", properties: { run_type: { type: "string" }, status: { type: "string" }, limit: { type: "number" }, offset: { type: "number" } } },
     },
     {
+      name: "list_comparison_studies",
+      description: "List authorized, versioned Comparison Studies for models, agents, tools, policies, context, workflows, or runtimes.",
+      inputSchema: { type: "object", properties: { limit: { type: "number" }, offset: { type: "number" } } },
+    },
+    {
+      name: "show_comparison_study",
+      description: "Show one Comparison Study with frozen evidence identity, metric configuration, confidence, and safe report drilldown.",
+      inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    },
+    {
       name: "show_intelligence_run",
       description: "Show one intelligence run, including evidence digest, versions, safe result summary, cost, and latency.",
       inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
@@ -554,6 +564,21 @@ function runtimeAndGovernanceTools(allowRegistryWrites = false): ToolDefinition[
           },
           required: ["initiative_id", "run_type"],
         },
+      },
+      {
+        name: "create_comparison_study",
+        description: "Create a versioned, secret-free Comparison Study. Requires --enable-registry-writes.",
+        inputSchema: { type: "object", properties: { data: { type: "object", additionalProperties: true } }, required: ["data"] },
+      },
+      {
+        name: "update_comparison_study",
+        description: "Update a Comparison Study configuration and advance its version. Requires --enable-registry-writes.",
+        inputSchema: { type: "object", properties: { id: { type: "string" }, data: { type: "object", additionalProperties: true } }, required: ["id", "data"] },
+      },
+      {
+        name: "run_comparison_study",
+        description: "Freeze currently matching evidence and queue a Comparison Study report. Requires --enable-registry-writes.",
+        inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
       },
       {
         name: "create_context_asset_draft",
@@ -2181,6 +2206,17 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
           });
           break;
 
+        case "list_comparison_studies":
+          result = await getClient().listComparisonStudies({
+            limit: args?.limit as number | undefined,
+            offset: args?.offset as number | undefined,
+          });
+          break;
+
+        case "show_comparison_study":
+          result = await getClient().getComparisonStudy(String(args!.id));
+          break;
+
         case "show_intelligence_run":
           result = await getClient().getIntelligenceRun(String(args!.id));
           break;
@@ -2251,6 +2287,27 @@ export async function startMcpServer(options: { enableRegistryWrites?: boolean }
           result = await getClient().createIntelligenceRun(data);
           break;
         }
+
+        case "create_comparison_study": {
+          if (!allowRegistryWrites) throw new Error("Comparison writes are disabled. Start MCP with --enable-registry-writes.");
+          const data = parseDataObject(args?.data);
+          if (hasBlockedSecretField(data)) throw new Error("Comparison Studies may not contain secrets or raw content.");
+          result = await getClient().createComparisonStudy(data);
+          break;
+        }
+
+        case "update_comparison_study": {
+          if (!allowRegistryWrites) throw new Error("Comparison writes are disabled. Start MCP with --enable-registry-writes.");
+          const data = parseDataObject(args?.data);
+          if (hasBlockedSecretField(data)) throw new Error("Comparison Studies may not contain secrets or raw content.");
+          result = await getClient().updateComparisonStudy(String(args!.id), data);
+          break;
+        }
+
+        case "run_comparison_study":
+          if (!allowRegistryWrites) throw new Error("Comparison writes are disabled. Start MCP with --enable-registry-writes.");
+          result = await getClient().runComparisonStudy(String(args!.id));
+          break;
 
         case "create_context_asset_draft": {
           if (!allowRegistryWrites) throw new Error("Context writes are disabled. Start MCP with --enable-registry-writes.");

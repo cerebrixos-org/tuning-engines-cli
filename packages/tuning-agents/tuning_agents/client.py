@@ -642,6 +642,22 @@ class TuningClient:
             trace_type="control",
         )
 
+    def list_comparison_studies(self, *, limit: int | None = None, offset: int | None = None) -> Any:
+        query = urlencode({key: value for key, value in {"limit": limit, "offset": offset}.items() if value is not None})
+        return self.request("GET", f"/api/v1/comparison-studies{f'?{query}' if query else ''}", trace_type="control")
+
+    def get_comparison_study(self, study_id: str) -> Any:
+        return self.request("GET", f"/api/v1/comparison-studies/{study_id}", trace_type="control")
+
+    def create_comparison_study(self, payload: Mapping[str, Any]) -> Any:
+        return self.request("POST", "/api/v1/comparison-studies", json=dict(payload), trace_type="control")
+
+    def update_comparison_study(self, study_id: str, payload: Mapping[str, Any]) -> Any:
+        return self.request("PATCH", f"/api/v1/comparison-studies/{study_id}", json=dict(payload), trace_type="control")
+
+    def run_comparison_study(self, study_id: str) -> Any:
+        return self.request("POST", f"/api/v1/comparison-studies/{study_id}/run", json={}, trace_type="control")
+
     def list_context_assets(
         self,
         *,

@@ -464,6 +464,7 @@ patterns.
 | `te assets list/show` | Inspect the tenant AI-system inventory and reviewed relationships |
 | `te trajectory evidence list/show/preview/freeze` | Preview correlated scope, then freeze reviewed Work Sessions into immutable evidence sets |
 | `te trajectory rules list/create/preview/freeze` | Save source-selection rules, preview authorized candidates, and freeze an immutable reviewed snapshot |
+| `te trajectory studies list/show/create/update/run` | Compare models, agents, tools, context, policies, workflows, or runtimes using frozen evidence and common metrics |
 | `te trajectory runs list/show/start` | Queue and inspect reproducible intelligence runs; recommendations remain review-only |
 | `te context record-use --event accepted|rejected|deviated|outcome` | Record bounded context feedback and outcome attribution without raw prompts or memory content |
 | `te registry sync --file tuning-registry.yml --dry-run/--apply` | Diff or apply agent, skill, and MCP registry manifests |

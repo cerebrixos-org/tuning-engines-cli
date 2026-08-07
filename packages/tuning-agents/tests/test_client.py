@@ -108,3 +108,21 @@ def test_selection_rules_and_context_feedback_use_control_plane_contract(monkeyp
     assert FakeHttpClient.calls[1][0:2] == ("POST", "https://app.example.test/api/v1/trajectory-selection-rules/tsr_1/preview")
     assert FakeHttpClient.calls[2][0:2] == ("POST", "https://app.example.test/api/v1/trajectory-selection-rules/tsr_1/freeze")
     assert FakeHttpClient.calls[3][0:2] == ("POST", "https://app.example.test/api/v1/context/uses")
+
+
+def test_comparison_studies_use_versioned_control_plane_contract(monkeypatch):
+    FakeHttpClient.calls = []
+    monkeypatch.setattr(httpx, "Client", FakeHttpClient)
+    client = TuningClient(api_key="sk-te-inference-test", api_url="https://app.example.test")
+
+    client.list_comparison_studies(limit=25)
+    client.create_comparison_study({"initiative_id": "ini_1", "name": "Models", "variants": []})
+    client.update_comparison_study("cmp_1", {"name": "Models v2"})
+    client.run_comparison_study("cmp_1")
+    client.get_comparison_study("cmp_1")
+
+    assert FakeHttpClient.calls[0][0:2] == ("GET", "https://app.example.test/api/v1/comparison-studies?limit=25")
+    assert FakeHttpClient.calls[1][0:2] == ("POST", "https://app.example.test/api/v1/comparison-studies")
+    assert FakeHttpClient.calls[2][0:2] == ("PATCH", "https://app.example.test/api/v1/comparison-studies/cmp_1")
+    assert FakeHttpClient.calls[3][0:2] == ("POST", "https://app.example.test/api/v1/comparison-studies/cmp_1/run")
+    assert FakeHttpClient.calls[4][0:2] == ("GET", "https://app.example.test/api/v1/comparison-studies/cmp_1")

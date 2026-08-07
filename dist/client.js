@@ -540,6 +540,27 @@ class TuningEnginesClient {
     async createIntelligenceRun(params) {
         return this.request("POST", "/api/v1/intelligence-runs", params);
     }
+    async listComparisonStudies(options) {
+        const params = new URLSearchParams();
+        if (options?.limit)
+            params.set("limit", String(options.limit));
+        if (options?.offset)
+            params.set("offset", String(options.offset));
+        const qs = params.toString();
+        return this.request("GET", `/api/v1/comparison-studies${qs ? `?${qs}` : ""}`);
+    }
+    async getComparisonStudy(id) {
+        return this.request("GET", `/api/v1/comparison-studies/${encodeURIComponent(id)}`);
+    }
+    async createComparisonStudy(params) {
+        return this.request("POST", "/api/v1/comparison-studies", params);
+    }
+    async updateComparisonStudy(id, params) {
+        return this.request("PATCH", `/api/v1/comparison-studies/${encodeURIComponent(id)}`, params);
+    }
+    async runComparisonStudy(id) {
+        return this.request("POST", `/api/v1/comparison-studies/${encodeURIComponent(id)}/run`, {});
+    }
     async listContextAssets(options) {
         const params = new URLSearchParams();
         if (options?.contextType)

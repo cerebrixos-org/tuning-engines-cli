@@ -37,6 +37,43 @@ exports.registerTrajectoryCommands = registerTrajectoryCommands;
 const output = __importStar(require("../output"));
 function registerTrajectoryCommands(program, getClient) {
     const trajectory = program.command("trajectory").description("Curate immutable evidence and run trajectory intelligence");
+    const studies = trajectory.command("studies").description("Compare models, agents, prompts, tools, policies, context, or runtimes");
+    studies.command("list")
+        .option("-l, --limit <n>", "Max results", "50")
+        .option("--offset <n>", "Offset", "0")
+        .action(async (opts) => output.json(await getClient().listComparisonStudies({ limit: Number(opts.limit), offset: Number(opts.offset) })));
+    studies.command("show <id>")
+        .action(async (id) => output.json(await getClient().getComparisonStudy(id)));
+    studies.command("create")
+        .requiredOption("--initiative <id>", "Initiative public ID")
+        .requiredOption("--name <name>", "Study name")
+        .requiredOption("--field <field>", "Variant field, for example model or runtime")
+        .requiredOption("--a <value>", "Variant A match value")
+        .requiredOption("--b <value>", "Variant B match value")
+        .option("--type <type>", "Comparison question type", "custom")
+        .option("--a-label <label>", "Variant A display label", "Variant A")
+        .option("--b-label <label>", "Variant B display label", "Variant B")
+        .option("--evaluation-profile <id>", "Common quality evaluation profile public ID")
+        .option("--filters <json>", "Population filters", "{}")
+        .option("--metrics <list>", "Comma-separated report metrics", "success_rate,quality_score,avg_cost_cents,p95_latency_ms,avg_duration_ms,avg_tool_calls,error_rate,retry_rate")
+        .option("--weights <json>", "Optional metric weights", "{}")
+        .option("--success-source <source>", "outcome, evaluation, or combined", "outcome")
+        .option("--continuous", "Continuously refresh matching evidence")
+        .action(async (opts) => output.json(await getClient().createComparisonStudy({
+        initiative_id: opts.initiative, name: opts.name, question_type: opts.type,
+        evaluation_profile_id: opts.evaluationProfile, continuous: Boolean(opts.continuous),
+        population_filters: parseObject(opts.filters) || {},
+        variants: [
+            { key: "variant_a", label: opts.aLabel, match: { field: opts.field, operator: "equals", value: opts.a } },
+            { key: "variant_b", label: opts.bLabel, match: { field: opts.field, operator: "equals", value: opts.b } },
+        ],
+        metric_config: { metrics: String(opts.metrics).split(",").map((value) => value.trim()).filter(Boolean), weights: parseObject(opts.weights) || {}, success_source: opts.successSource },
+    })));
+    studies.command("update <id>")
+        .requiredOption("--data <json>", "Complete safe study update payload")
+        .action(async (id, opts) => output.json(await getClient().updateComparisonStudy(id, parseObject(opts.data) || {})));
+    studies.command("run <id>")
+        .action(async (id) => output.json(await getClient().runComparisonStudy(id)));
     const evidence = trajectory.command("evidence").description("Manage immutable Initiative evidence sets");
     const rules = trajectory.command("rules").description("Manage saved, versioned source-selection rules");
     rules.command("list")

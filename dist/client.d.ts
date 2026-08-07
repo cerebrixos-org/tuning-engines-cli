@@ -320,6 +320,14 @@ export declare class TuningEnginesClient {
         evidence_set_id?: string;
         parameters?: Record<string, any>;
     }): Promise<any>;
+    listComparisonStudies(options?: {
+        limit?: number;
+        offset?: number;
+    }): Promise<any>;
+    getComparisonStudy(id: string): Promise<any>;
+    createComparisonStudy(params: Record<string, any>): Promise<any>;
+    updateComparisonStudy(id: string, params: Record<string, any>): Promise<any>;
+    runComparisonStudy(id: string): Promise<any>;
     listContextAssets(options?: {
         contextType?: string;
         status?: string;
