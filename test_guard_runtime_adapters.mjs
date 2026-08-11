@@ -152,6 +152,10 @@ try {
   assert.match(firstPromptRequest.run_id, /^run_codex_/);
   assert.match(firstPromptRequest.request_id, /^req_codex_/);
   assert.notEqual(firstPromptRequest.run_id, "run_sidecar_stale");
+  assert.match(firstPromptRequest.events[0].trace_id, /^[0-9a-f]{32}$/);
+  assert.match(firstPromptRequest.events[0].span_id, /^[0-9a-f]{16}$/);
+  assert.equal(firstPromptRequest.events[0].parent_span_id, undefined);
+  assert.equal(firstPromptRequest.events[0].type, "agent.turn");
 
   await runHook(["guard", "codex", "hook", "--event", "PreToolUse"], {
     session_id: "native-session-turns",
@@ -164,10 +168,10 @@ try {
   const firstTurnTool = lastEvent(api);
   assert.equal(api.requests.at(-1).run_id, firstPromptRequest.run_id);
   assert.equal(firstTurnTool.metadata.tool_call_id, "tool-native-read-1");
-  assert.equal(firstTurnTool.metadata.human_summary, "Read README.md");
+  assert.equal(firstTurnTool.metadata.human_summary, "Read a source file.");
   assert.equal(firstTurnTool.metadata.native_event_contract_version, "te-native-event-v2");
   assert.match(firstTurnTool.metadata.cli_version, /^0\./);
-  assert.match(firstTurnTool.metadata.resolved_hook_command_path, /dist[\\/]cli\.js$/);
+  assert.match(firstTurnTool.metadata.resolved_hook_command_path_hash, /^[0-9a-f]{64}$/);
   assert.equal(firstTurnTool.metadata.tool_input, undefined);
   assert.equal(firstTurnTool.metadata.tool_response, undefined);
   assert.doesNotMatch(firstTurnTool.metadata.human_summary, /must not appear/);
@@ -180,7 +184,7 @@ try {
     agent_type: "read_package",
   }, { apiUrl: api.apiUrl });
   const subagentStarted = lastEvent(api);
-  assert.equal(subagentStarted.metadata.human_summary, "Started subagent: read_package");
+  assert.equal(subagentStarted.metadata.human_summary, "Started a delegated task.");
 
   await runHook(["guard", "codex", "hook", "--event", "SubagentStop"], {
     session_id: "native-session-turns",
@@ -191,7 +195,7 @@ try {
     last_assistant_message: "package name found",
   }, { apiUrl: api.apiUrl });
   const subagentFinished = lastEvent(api);
-  assert.equal(subagentFinished.metadata.human_summary, "Subagent finished: package name found");
+  assert.equal(subagentFinished.metadata.human_summary, "Delegated task completed.");
   assert.equal(subagentFinished.parent_id, subagentStarted.id);
 
   await runHook(["guard", "codex", "hook", "--event", "Stop"], {
@@ -204,7 +208,7 @@ try {
   assert.equal(firstStopRequest.run_id, firstPromptRequest.run_id);
   assert.equal(firstStopRequest.status, "succeeded");
   assert.ok(firstStopRequest.ended_at);
-  assert.equal(lastEvent(api).metadata.final_response, "README review complete.");
+  assert.equal(lastEvent(api).metadata.final_response, undefined);
 
   await runHook(["guard", "codex", "hook", "--event", "UserPromptSubmit"], {
     session_id: "native-session-turns",
@@ -214,6 +218,7 @@ try {
   }, { apiUrl: api.apiUrl });
   const secondPromptRequest = api.requests.at(-1);
   assert.notEqual(secondPromptRequest.run_id, firstPromptRequest.run_id, "each native turn must create a fresh trace");
+  assert.notEqual(secondPromptRequest.events[0].trace_id, firstPromptRequest.events[0].trace_id, "each native turn must create a fresh W3C trace");
   assert.equal(secondPromptRequest.metadata.session_id, firstPromptRequest.metadata.session_id, "turn traces must share one Work Session identity");
 
   await runHook(["guard", "codex", "hook", "--event", "SessionEnd"], {
@@ -257,7 +262,9 @@ try {
   assert.equal(failedBash.metadata.success, false);
   assert.equal(failedBash.metadata.ok, false);
   assert.equal(failedBash.metadata.tool_call_id, proposed.metadata.tool_call_id, "completion must reuse proposal tool_call_id");
-  assert.equal(failedBash.parent_id, proposed.id, "completion should parent to the proposal event");
+  assert.equal(failedBash.id, proposed.id, "completion must update the proposal event");
+  assert.equal(failedBash.span_id, proposed.span_id, "completion must close the proposal span");
+  assert.equal(failedBash.parent_span_id, proposed.parent_span_id, "tool span must remain a child of the active turn");
   assert.equal(failedBash.metadata.tool_input, undefined);
   assert.equal(failedBash.metadata.tool_response, undefined);
   assert.doesNotMatch(JSON.stringify(failedBash), /sk-te-secret-would-leak/);
@@ -347,7 +354,8 @@ try {
   assert.equal(claudeToolCompleted.status, "succeeded");
   assert.equal(claudeToolCompleted.metadata.phase, "executed");
   assert.equal(claudeToolCompleted.metadata.tool_call_id, claudeToolProposed.metadata.tool_call_id);
-  assert.equal(claudeToolCompleted.parent_id, claudeToolProposed.id);
+  assert.equal(claudeToolCompleted.id, claudeToolProposed.id);
+  assert.equal(claudeToolCompleted.span_id, claudeToolProposed.span_id);
   await runHook(["guard", "claude-code", "hook", "--event", "UserPromptSubmit", "--mode", "observe"], {
     session_id: "claude-native-turns",
     cwd: tmp,
@@ -364,7 +372,7 @@ try {
   const claudeSessionEnd = api.requests.at(-1);
   assert.equal(claudeSessionEnd.run_id, claudeSecondPrompt.run_id);
   assert.equal(claudeSessionEnd.status, "succeeded");
-  assert.equal(lastEvent(api).metadata.final_response, "Package metadata review complete.");
+  assert.equal(lastEvent(api).metadata.final_response, undefined);
 
   await runHook(["guard", "claude-code", "hook", "--event", "PermissionDenied", "--mode", "observe"], {
     session_id: "claude-denied",
@@ -408,7 +416,8 @@ try {
   assert.equal(opencodeAfter.status, "failed");
   assert.equal(opencodeAfter.metadata.phase, "failed");
   assert.equal(opencodeAfter.metadata.tool_call_id, opencodeBefore.metadata.tool_call_id);
-  assert.equal(opencodeAfter.parent_id, opencodeBefore.id);
+  assert.equal(opencodeAfter.id, opencodeBefore.id);
+  assert.equal(opencodeAfter.span_id, opencodeBefore.span_id);
 
   await runHook(["guard", "opencode", "hook", "--event", "approval.denied"], {
     session_id: "opencode-approval",
