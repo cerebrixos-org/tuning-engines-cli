@@ -141,6 +141,41 @@ function installHook(settings, event, mode, failOpen) {
         entry.matcher = "*";
     settings.hooks[event].push(entry);
 }
+function existingClaudeHookMode(settings) {
+    for (const entries of Object.values(settings.hooks || {})) {
+        for (const entry of Array.isArray(entries) ? entries : []) {
+            for (const hook of Array.isArray(entry?.hooks) ? entry.hooks : []) {
+                const command = String(hook?.command || "");
+                if (!isGuardHookCommand(command, "claude-code"))
+                    continue;
+                return {
+                    mode: command.includes("--mode observe") ? "observe" : "enforce",
+                    failOpen: command.includes("--fail-open"),
+                };
+            }
+        }
+    }
+    return undefined;
+}
+function writeClaudeHooks(project, options = {}) {
+    const { projectDir, warnings } = resolveClaudeProjectDir(project);
+    const settingsPath = claudeSettingsPath(projectDir, Boolean(options.shared));
+    const settings = readJsonFile(settingsPath);
+    const existing = existingClaudeHookMode(settings);
+    const mode = options.mode || existing?.mode || "observe";
+    const failOpen = options.failOpen ?? existing?.failOpen ?? false;
+    const before = JSON.stringify(settings);
+    settings.hooks ||= {};
+    removeExistingGuardHooks(settings.hooks);
+    for (const event of HOOK_EVENTS)
+        installHook(settings, event, mode, failOpen);
+    const changed = before !== JSON.stringify(settings);
+    if (options.write !== false && changed)
+        writeJsonFile(settingsPath, settings);
+    if (options.write !== false)
+        installClaudeGoalCommand(projectDir);
+    return { settingsPath, projectDir, mode, failOpen, changed, warnings };
+}
 function removeExistingCodexHooks(hooks) {
     for (const event of Object.keys(hooks || {})) {
         hooks[event] = Array.isArray(hooks[event])
@@ -1471,6 +1506,8 @@ function registerGuardCommands(program, getClient) {
         .command("run")
         .description("Run a local agent command with sidecar lifecycle tracing")
         .option("--runtime <runtime>", "Runtime label, e.g. codex, anthropic_sdk, custom", "custom")
+        .option("--project <dir>", "Project directory used for native runtime hooks", process.cwd())
+        .option("--no-install-hooks", "Do not install or refresh native runtime hooks before launch")
         .allowUnknownOption(true)
         .argument("[command...]", "Command to run after --")
         .action(async (commandParts, opts) => {
@@ -1478,11 +1515,23 @@ function registerGuardCommands(program, getClient) {
             console.error("Usage: te guard run --runtime codex -- codex");
             process.exit(1);
         }
-        const runtime = String(opts.runtime || "custom");
+        const runtime = String(opts.runtime || "custom").replace(/-/g, "_");
         const [command, ...args] = commandParts;
         const ids = sidecarRunIds(runtime, commandParts);
         const client = getClient();
         const activeGoal = (0, goal_context_1.loadGoalContext)();
+        if (runtime === "claude_code" && opts.installHooks !== false) {
+            try {
+                const installed = writeClaudeHooks(opts.project || process.cwd());
+                if (installed.changed) {
+                    console.log(`Installed Claude Code tool telemetry hooks in ${installed.settingsPath}`);
+                    console.log(`Mode: ${claudeInstallModeSummary(installed.mode, installed.failOpen)}`);
+                }
+            }
+            catch (err) {
+                console.error(`Tuning Engines guard warning: Claude Code hooks could not be activated: ${err.message}`);
+            }
+        }
         if (!TURN_SCOPED_RUNTIMES.has(runtime)) {
             try {
                 await recordSidecarRun(client, runtime, commandParts, ids, "running", "started");

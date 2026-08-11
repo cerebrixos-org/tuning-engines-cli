@@ -34,6 +34,11 @@ async function startFakeApi() {
         json(res, 200, { access_token: "access-token", expires_in: 900 });
         return;
       }
+      if (req.method === "POST" && url.pathname === "/api/v1/agent_actions/evaluate") {
+        await readRequestJson(req);
+        json(res, 200, { decision: { allowed: true, reason: "test allowed" } });
+        return;
+      }
       if (req.method === "POST" && url.pathname === "/api/v1/traces") {
         const body = await readRequestJson(req);
         requests.push(body);
@@ -324,7 +329,25 @@ try {
     tool_use_id: "claude-read-1",
     tool_input: { path: "README.md" },
   }, { apiUrl: api.apiUrl });
+  const claudeToolProposed = lastEvent(api);
   assert.equal(api.requests.at(-1).run_id, claudeFirstPrompt.run_id);
+  assert.equal(claudeToolProposed.type, "agent.tool_call");
+  assert.equal(claudeToolProposed.status, "proposed");
+  assert.equal(claudeToolProposed.metadata.tool_call_id, "claude-read-1");
+  await runHook(["guard", "claude-code", "hook", "--event", "PostToolUse", "--mode", "observe"], {
+    session_id: "claude-native-turns",
+    cwd: tmp,
+    tool_name: "Read",
+    tool_use_id: "claude-read-1",
+    tool_input: { path: "README.md" },
+    tool_response: { summary: "README loaded", ok: true },
+  }, { apiUrl: api.apiUrl });
+  const claudeToolCompleted = lastEvent(api);
+  assert.equal(api.requests.at(-1).run_id, claudeFirstPrompt.run_id);
+  assert.equal(claudeToolCompleted.status, "succeeded");
+  assert.equal(claudeToolCompleted.metadata.phase, "executed");
+  assert.equal(claudeToolCompleted.metadata.tool_call_id, claudeToolProposed.metadata.tool_call_id);
+  assert.equal(claudeToolCompleted.parent_id, claudeToolProposed.id);
   await runHook(["guard", "claude-code", "hook", "--event", "UserPromptSubmit", "--mode", "observe"], {
     session_id: "claude-native-turns",
     cwd: tmp,

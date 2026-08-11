@@ -147,7 +147,17 @@ te goal show
 te goal complete --result succeeded
 ```
 
-Install optional native telemetry hooks for Claude Code or Codex:
+Launch Claude Code through the guard to automatically install or refresh its
+project-local native telemetry hooks in observe mode and capture local tool
+lifecycle events:
+
+```bash
+te guard run --runtime claude_code -- claude
+```
+
+Existing enforce/fail-open settings are preserved. Use `--no-install-hooks`
+only when hook management is handled separately. You can also install and
+diagnose native hooks explicitly:
 
 ```bash
 te guard claude-code install --mode observe --project .
