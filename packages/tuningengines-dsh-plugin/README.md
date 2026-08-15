@@ -8,7 +8,7 @@ identity, and exports metadata-only traces through a durable local spool.
 
 ```bash
 export TE_API_KEY="your-tenant-token-or-inference-key"
-dsh plugin --profile default add tuningengines-dsh-plugin
+dsh plugin --profile default add tuningengines-cli
 dsh --profile default
 ```
 
