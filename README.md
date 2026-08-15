@@ -184,6 +184,23 @@ claude plugin marketplace add cerebrixos-org/tuning-engines-cli
 claude plugin install tuning-engines@tuning-engines
 ```
 
+The same plugin directory includes a Codex plugin manifest, marketplace entry,
+MCP server, and tenant-operations skill. It uses the Tuning Engines web app as
+the shared control-plane UI for traces, approvals, policies, cost, and review.
+
+### DeepSeek Harness Plugin
+
+Install the native Harness bundle to capture turn, model-step, and tool
+lifecycle telemetry and optionally enforce TE governance before tool execution:
+
+```bash
+export TE_API_KEY="your-tenant-token-or-inference-key"
+dsh plugin --profile default add tuningengines-dsh-plugin
+```
+
+The adapter uses a disk-backed local spool, background batching, bounded
+retries, stable tool-call correlation, and metadata-only capture by default.
+
 ### VS Code / Cursor / Windsurf
 
 Add to your MCP settings (`.vscode/mcp.json` or equivalent):
@@ -248,6 +265,16 @@ Use the CLI/MCP package when you want `npx` tools for assistants. Use the
 Python SDK when you want your own app to run durable agent workflows while
 Tuning Engines remains the governed control plane for models, agents, skills,
 MCP tools, RBAC, AGT policy, audit, usage, and token economics.
+
+OpenAI Agents SDK users can install the native model and trace integration:
+
+```bash
+pip install "tuning-engines[openai-agents]"
+```
+
+See [packages/tuning-agents/README.md](packages/tuning-agents/README.md#openai-agents-sdk)
+for setup. The OpenAI Agents runtime owns the loop; TE supplies the governed
+endpoint and receives metadata-only SDK traces through its background processor.
 
 Install the published Python SDK:
 

@@ -27,6 +27,7 @@ and OpenAI SDK integrations, see
 ```bash
 pip install "tuning-engines[langgraph]"
 pip install "tuning-engines[temporal]"
+pip install "tuning-engines[openai-agents]"
 ```
 
 The published package name is `tuning-engines`; it installs the
@@ -37,6 +38,38 @@ From this repository:
 ```bash
 pip install -e packages/tuning-agents[langgraph,temporal]
 ```
+
+## OpenAI Agents SDK
+
+This integration routes model calls through the Tuning Engines OpenAI-compatible
+endpoint and registers a native OpenAI Agents trace processor. It records model,
+tool, handoff, guardrail, and workflow spans without retaining raw prompts, tool
+arguments, tool output, or hidden reasoning.
+
+```python
+from agents import Agent, RunConfig, Runner
+from tuning_agents.openai_agents import configure_openai_agents
+
+integration = configure_openai_agents(
+    inference_key="sk-te-...",
+    api_key="te-api-...",  # optional when the inference key may ingest traces
+)
+
+agent = Agent(name="Support agent", model="your-te-deployment")
+result = Runner.run_sync(
+    agent,
+    "Resolve the support request",
+    run_config=RunConfig(trace_include_sensitive_data=False),
+)
+integration.force_flush()
+```
+
+OpenAI Agents owns the agent loop and tool execution. Tuning Engines supplies
+the governed model endpoint, policy/control plane, usage and cost accounting,
+and metadata-only execution traces. The SDK's background batch processor keeps
+trace export off the inference response path. TE replaces the default OpenAI
+trace processor unless `replace_default_tracing=False` is explicitly selected,
+preventing accidental dual export.
 
 ## LangGraph
 
