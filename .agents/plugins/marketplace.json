@@ -1,0 +1,20 @@
+{
+  "name": "tuning-engines",
+  "interface": {
+    "displayName": "Tuning Engines"
+  },
+  "plugins": [
+    {
+      "name": "tuning-engines",
+      "source": {
+        "source": "local",
+        "path": "./plugins/tuning-engines"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "name": "tuningengines-dsh-plugin",
+  "version": "0.1.0",
+  "description": "Tuning Engines governance, trace export, and runtime intelligence for DeepSeek Harness.",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "pack:check": "npm pack --dry-run"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "agent-observability",
+    "agent-governance",
+    "tuning-engines"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cerebrixos-org/tuning-engines-cli.git",
+    "directory": "packages/tuningengines-dsh-plugin"
+  },
+  "homepage": "https://app.tuningengines.com/docs/orchestration"
+}

@@ -1,0 +1,33 @@
+{
+  "name": "tuning-engines",
+  "version": "0.1.0",
+  "description": "Govern and observe AI models, agents, skills, and MCP tools with Tuning Engines.",
+  "author": {
+    "name": "Ockham Labs Inc.",
+    "email": "vc@tuningengines.com",
+    "url": "https://tuningengines.com"
+  },
+  "homepage": "https://app.tuningengines.com/docs",
+  "repository": "https://github.com/cerebrixos-org/tuning-engines-cli",
+  "license": "MIT",
+  "keywords": ["ai-governance", "agents", "mcp", "tracing", "compliance"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Tuning Engines",
+    "shortDescription": "Governed AI runtime and trace control plane",
+    "longDescription": "Use Tuning Engines tenant tools for governed model, agent, skill, and MCP operations, approvals, traces, usage, evaluations, and fine-tuning workflows.",
+    "developerName": "Ockham Labs Inc.",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://tuningengines.com",
+    "privacyPolicyURL": "https://app.tuningengines.com/privacy",
+    "termsOfServiceURL": "https://app.tuningengines.com/terms",
+    "defaultPrompt": [
+      "Show my recent Tuning Engines traces.",
+      "List pending governance approvals.",
+      "Review AI usage and policy decisions."
+    ],
+    "brandColor": "#06B6D4"
+  }
+}

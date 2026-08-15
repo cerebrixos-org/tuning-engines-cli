@@ -1,0 +1,10 @@
+- insert:
+    - id: tuning-engines
+      name: tuningengines-dsh-plugin
+      config:
+        apiUrl: !!js process.env.TE_API_URL || 'https://app.tuningengines.com'
+        apiKey: !!js process.env.TE_API_KEY || process.env.TE_INFERENCE_KEY
+        governanceMode: !!js process.env.TE_GOVERNANCE_MODE || 'observe'
+        flushIntervalMs: !!js Number(process.env.TE_TRACE_FLUSH_INTERVAL_MS || 2000)
+        maxBatchSize: !!js Number(process.env.TE_TRACE_BATCH_SIZE || 64)
+        spoolPath: !!js process.env.TE_TRACE_SPOOL_PATH
