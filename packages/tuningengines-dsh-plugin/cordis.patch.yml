@@ -1,6 +1,6 @@
 - insert:
     - id: tuning-engines
-      name: tuningengines-dsh-plugin
+      name: tuningengines-cli/dsh-plugin
       config:
         apiUrl: !!js process.env.TE_API_URL || 'https://app.tuningengines.com'
         apiKey: !!js process.env.TE_API_KEY || process.env.TE_INFERENCE_KEY

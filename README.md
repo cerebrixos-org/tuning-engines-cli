@@ -195,7 +195,7 @@ lifecycle telemetry and optionally enforce TE governance before tool execution:
 
 ```bash
 export TE_API_KEY="your-tenant-token-or-inference-key"
-dsh plugin --profile default add tuningengines-dsh-plugin
+dsh plugin --profile default add tuningengines-cli
 ```
 
 The adapter uses a disk-backed local spool, background batching, bounded

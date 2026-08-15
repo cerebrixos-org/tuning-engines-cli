@@ -1,6 +1,7 @@
 {
   "name": "tuningengines-dsh-plugin",
   "version": "0.1.0",
+  "private": true,
   "description": "Tuning Engines governance, trace export, and runtime intelligence for DeepSeek Harness.",
   "type": "module",
   "main": "index.js",
