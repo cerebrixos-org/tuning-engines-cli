@@ -15,6 +15,7 @@ def create_tuning_langgraph_agent(
     tool_names: set[str] | None = None,
     agent_names: list[str] | set[str] | None = None,
     agent_descriptions: dict[str, str] | None = None,
+    approval_id: str | None = None,
     checkpointer: Any | None = None,
     interrupt_before: list[str] | None = None,
     **agent_kwargs: Any,
@@ -37,14 +38,21 @@ def create_tuning_langgraph_agent(
         api_key=client.api_key,
         base_url=client.inference_url,
         timeout=client.timeout,
+        default_headers={"X-TE-Approval-ID": approval_id} if approval_id else None,
     )
-    tools = make_langchain_tools(client, server_names=server_names, tool_names=tool_names)
+    tools = make_langchain_tools(
+        client,
+        server_names=server_names,
+        tool_names=tool_names,
+        approval_id=approval_id,
+    )
     if agent_names:
         tools.extend(
             make_agent_langchain_tools(
                 client,
                 agent_names=agent_names,
                 descriptions=agent_descriptions,
+                approval_id=approval_id,
             )
         )
 
