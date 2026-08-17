@@ -17,9 +17,13 @@ def normalize_mcp_tools(payload: Any) -> list[dict[str, Any]]:
     """
 
     if isinstance(payload, dict) and isinstance(payload.get("tools"), list):
-        return [dict(tool) for tool in payload["tools"]]
+        payload = payload["tools"]
     if isinstance(payload, list):
-        return [dict(tool) for tool in payload]
+        tools = [dict(tool) for tool in payload]
+        for tool in tools:
+            if tool.get("mcp_server_name"):
+                tool.setdefault("server_name", tool["mcp_server_name"])
+        return tools
 
     tools: list[dict[str, Any]] = []
     if isinstance(payload, dict):
@@ -60,6 +64,7 @@ def make_langchain_tools(
     *,
     server_names: set[str] | None = None,
     tool_names: set[str] | None = None,
+    approval_id: str | None = None,
 ) -> list[Any]:
     try:
         from langchain_core.tools import StructuredTool
@@ -90,6 +95,7 @@ def make_langchain_tools(
                 server_name=_server_name,
                 tool_name=_tool_name,
                 arguments=kwargs,
+                approval_id=approval_id,
             )
 
         tools.append(
@@ -105,10 +111,11 @@ def make_langchain_tools(
 
 
 def make_agent_langchain_tools(
-    client: "TuningClient",
+    client: TuningClient,
     *,
     agent_names: list[str] | set[str],
     descriptions: Mapping[str, str] | None = None,
+    approval_id: str | None = None,
 ) -> list[Any]:
     try:
         from langchain_core.tools import StructuredTool
@@ -124,7 +131,12 @@ def make_agent_langchain_tools(
         safe_name = _safe_identifier(agent_name)
 
         def _call(message: str, context: dict[str, Any] | None = None, _agent_name: str = agent_name) -> Any:
-            return client.call_agent(agent_name=_agent_name, message=message, context=context or {})
+            return client.call_agent(
+                agent_name=_agent_name,
+                message=message,
+                context=context or {},
+                approval_id=approval_id,
+            )
 
         tools.append(
             StructuredTool.from_function(

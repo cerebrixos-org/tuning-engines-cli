@@ -128,6 +128,7 @@ async def react_agent_activity(payload: dict[str, Any]) -> dict[str, Any]:
         tool_names=set(payload.get("tool_names") or []),
         agent_names=payload.get("agent_names") or [],
         agent_descriptions=payload.get("agent_descriptions") or {},
+        approval_id=payload.get("approval_id"),
     )
 
     try:

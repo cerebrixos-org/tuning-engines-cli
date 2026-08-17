@@ -1,14 +1,22 @@
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+
+import tuning_agents.client as client_module
+import tuning_agents.langgraph as langgraph_module
+import tuning_agents.temporal_react_streams as react_streams_module
 from tuning_agents.temporal import tuning_temporal_activity_names
 from tuning_agents.temporal_react_streams import (
     ReactStreamEvent,
     TemporalReactRunInput,
-    TuningReactStreamsWorkflow,
-    TuningReactWorkflow,
     TuningEnginesTemporalReactStreamsFeatures,
     TuningEnginesTemporalReactStreamsPluginConfig,
+    TuningReactStreamsWorkflow,
+    TuningReactWorkflow,
     define_temporal_react_streams_workflow,
-    tuning_temporal_react_streams_activity_names,
     tuning_temporal_react_streams_activities_for,
+    tuning_temporal_react_streams_activity_names,
 )
 
 
@@ -96,3 +104,29 @@ def test_react_streams_combined_activities_are_deduped():
     names = [activity.__name__ for activity in tuning_temporal_react_streams_activities_for(features)]
 
     assert len(names) == len(set(names))
+
+
+@pytest.mark.asyncio
+async def test_react_activity_forwards_approval(monkeypatch):
+    captured = {}
+    client = SimpleNamespace(trace=SimpleNamespace(run_id=None, as_dict=lambda: {"events": []}))
+
+    monkeypatch.setattr(client_module, "TuningClient", lambda **kwargs: client)
+    monkeypatch.setattr(
+        langgraph_module,
+        "create_tuning_langgraph_agent",
+        lambda _client, **kwargs: captured.update(kwargs) or "agent",
+    )
+    monkeypatch.setattr(langgraph_module, "invoke_with_trace", lambda *args, **kwargs: "done")
+    monkeypatch.setattr(react_streams_module, "publish_react_stream_event", AsyncMock())
+
+    result = await react_streams_module.react_agent_activity(
+        {
+            "model": "test-model",
+            "messages": [{"role": "user", "content": "hello"}],
+            "approval_id": "apr_test",
+        }
+    )
+
+    assert result["result"] == "done"
+    assert captured["approval_id"] == "apr_test"
