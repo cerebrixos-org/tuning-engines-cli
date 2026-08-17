@@ -236,6 +236,32 @@ handle = await temporal.start_workflow(
 )
 ```
 
+MCP function names sent to a model must be identifier-safe. When the real MCP
+server name contains spaces or punctuation, preserve the exact dispatch target
+with `mcp_tool_targets`:
+
+```python
+AgentRunInput(
+    messages=[{"role": "user", "content": "Fetch the top Hacker News story."}],
+    tools=[
+        {
+            "type": "function",
+            "function": {
+                "name": "Hacker_News_MCP__hn_get_stories",
+                "description": "Fetch Hacker News stories.",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        }
+    ],
+    mcp_tool_targets={
+        "Hacker_News_MCP__hn_get_stories": {
+            "server_name": "Hacker News MCP",
+            "tool_name": "hn_get_stories",
+        }
+    },
+)
+```
+
 If you only want part of the integration on a worker, turn off feature flags:
 
 ```python

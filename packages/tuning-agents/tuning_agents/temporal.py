@@ -30,6 +30,7 @@ class AgentRunInput:
     model: str = "auto"
     messages: list[dict[str, Any]] = field(default_factory=list)
     tools: list[dict[str, Any]] | None = None
+    mcp_tool_targets: dict[str, dict[str, str]] = field(default_factory=dict)
     max_steps: int = 8
     run_id: str | None = None
     request_id: str | None = None
@@ -363,7 +364,10 @@ class TuningAgentWorkflow:
                         start_to_close_timeout=timedelta(minutes=2),
                     )
                 else:
-                    server_name, tool_name = _split_tool_name(tool_call_name)
+                    server_name, tool_name = _split_tool_name(
+                        tool_call_name,
+                        request.mcp_tool_targets,
+                    )
                     tool_result = await workflow.execute_activity(
                         mcp_tool_activity,
                         {
@@ -433,7 +437,19 @@ def _metadata_from_payload(
     return metadata
 
 
-def _split_tool_name(name: str) -> tuple[str, str]:
+def _split_tool_name(
+    name: str,
+    targets: dict[str, dict[str, str]] | None = None,
+) -> tuple[str, str]:
+    if targets is not None and name in targets:
+        target = targets[name]
+        if (
+            not isinstance(target, dict)
+            or not target.get("server_name")
+            or not target.get("tool_name")
+        ):
+            raise ValueError(f"MCP tool target for {name!r} requires server_name and tool_name")
+        return target["server_name"], target["tool_name"]
     if "__" in name:
         return tuple(name.split("__", 1))  # type: ignore[return-value]
     if "." in name:
