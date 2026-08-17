@@ -194,7 +194,7 @@ class TuningEnginesTraceExporter:
                     f"{self.api_url}/api/v1/traces",
                     headers={
                         "Authorization": f"Bearer {self.api_key}",
-                        "User-Agent": "tuning-engines/0.1.5 openai-agents",
+                        "User-Agent": "tuning-engines/0.1.6 openai-agents",
                     },
                     json=payload,
                 )

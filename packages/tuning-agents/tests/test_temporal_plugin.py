@@ -1,3 +1,8 @@
+from unittest.mock import AsyncMock
+
+import pytest
+
+import tuning_agents.temporal as temporal_module
 from tuning_agents.temporal import (
     AgentRunInput,
     TuningAgentWorkflow,
@@ -87,3 +92,54 @@ def test_agent_run_input_allows_worker_env_key():
     request = AgentRunInput(model="test-model")
 
     assert request.api_key is None
+
+
+@pytest.mark.asyncio
+async def test_builtin_workflow_preserves_raw_mcp_target(monkeypatch):
+    name = "Hacker_News_MCP__hn_get_stories"
+    execute_activity = AsyncMock(
+        side_effect=[
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "id": "call-1",
+                                    "function": {"name": name, "arguments": "{}"},
+                                }
+                            ],
+                        }
+                    }
+                ]
+            },
+            {"result": [{"title": "Temporal"}]},
+            {"choices": [{"message": {"role": "assistant", "content": "Done"}}]},
+        ]
+    )
+    monkeypatch.setattr(temporal_module.workflow, "execute_activity", execute_activity)
+
+    await TuningAgentWorkflow().run(
+        AgentRunInput(
+            messages=[{"role": "user", "content": "Fetch a story"}],
+            tools=[{"type": "function", "function": {"name": name}}],
+            mcp_tool_targets={
+                name: {
+                    "server_name": "Hacker News MCP",
+                    "tool_name": "hn_get_stories",
+                }
+            },
+        )
+    )
+
+    mcp_payload = execute_activity.call_args_list[1].args[1]
+    assert (mcp_payload["server_name"], mcp_payload["tool_name"]) == (
+        "Hacker News MCP",
+        "hn_get_stories",
+    )
+
+
+def test_mcp_target_mapping_rejects_an_empty_entry():
+    with pytest.raises(ValueError, match="requires server_name and tool_name"):
+        temporal_module._split_tool_name("server__tool", {"server__tool": {}})
