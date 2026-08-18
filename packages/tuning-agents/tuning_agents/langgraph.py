@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 from .client import TuningClient
@@ -28,8 +29,8 @@ def create_tuning_langgraph_agent(
     """
 
     try:
-        from langchain.agents import create_agent
         from langchain_openai import ChatOpenAI
+        from langgraph.prebuilt import create_react_agent
     except ImportError as exc:  # pragma: no cover - depends on optional extra
         raise ImportError("Install tuning-agents[langgraph] to use the LangGraph adapter") from exc
 
@@ -62,14 +63,20 @@ def create_tuning_langgraph_agent(
     if interrupt_before is not None:
         kwargs["interrupt_before"] = interrupt_before
     if prompt is not None:
-        kwargs["system_prompt"] = prompt
+        kwargs["prompt"] = prompt
 
     span_id = client.trace.start(
         "langgraph.agent.create",
         {"model": model, "tools": [getattr(tool, "name", None) for tool in tools]},
     )
     try:
-        agent = create_agent(llm, tools, **kwargs)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"create_react_agent has been moved to `langchain\.agents`.*",
+                category=DeprecationWarning,
+            )
+            agent = create_react_agent(llm, tools, **kwargs)
         client.trace.finish(span_id, {"tool_count": len(tools)})
         return agent
     except Exception as exc:
