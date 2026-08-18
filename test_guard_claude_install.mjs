@@ -136,6 +136,28 @@ function readJson(file) {
 const project = path.join(tmp, "disaster-management-rag");
 fs.mkdirSync(project, { recursive: true });
 
+const autoProject = path.join(tmp, "auto-installed");
+fs.mkdirSync(autoProject, { recursive: true });
+const autoOutput = run([
+  "guard", "run", "--runtime", "claude_code", "--project", autoProject,
+  "--", process.execPath, "-e", "process.exit(0)",
+]);
+const autoSettingsPath = path.join(autoProject, ".claude", "settings.local.json");
+assert.ok(fs.existsSync(autoSettingsPath), "guard run should activate Claude native hooks before launch");
+assert.match(autoOutput, /Installed Claude Code tool telemetry hooks/);
+const autoHooks = readJson(autoSettingsPath).hooks;
+for (const event of ["UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "SessionEnd"]) {
+  assert.ok(Array.isArray(autoHooks[event]), `${event} should be auto-installed by guard run`);
+}
+
+const optedOutProject = path.join(tmp, "auto-install-opt-out");
+fs.mkdirSync(optedOutProject, { recursive: true });
+run([
+  "guard", "run", "--runtime", "claude_code", "--project", optedOutProject,
+  "--no-install-hooks", "--", process.execPath, "-e", "process.exit(0)",
+]);
+assert.ok(!fs.existsSync(path.join(optedOutProject, ".claude", "settings.local.json")), "hook activation should be explicitly disableable");
+
 const sibling = `${project}.claude`;
 fs.mkdirSync(path.join(sibling, "commands"), { recursive: true });
 fs.writeFileSync(path.join(sibling, "commands", "custom.md"), "# keep me\n");

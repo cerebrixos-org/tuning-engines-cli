@@ -141,6 +141,41 @@ function installHook(settings, event, mode, failOpen) {
         entry.matcher = "*";
     settings.hooks[event].push(entry);
 }
+function existingClaudeHookMode(settings) {
+    for (const entries of Object.values(settings.hooks || {})) {
+        for (const entry of Array.isArray(entries) ? entries : []) {
+            for (const hook of Array.isArray(entry?.hooks) ? entry.hooks : []) {
+                const command = String(hook?.command || "");
+                if (!isGuardHookCommand(command, "claude-code"))
+                    continue;
+                return {
+                    mode: command.includes("--mode observe") ? "observe" : "enforce",
+                    failOpen: command.includes("--fail-open"),
+                };
+            }
+        }
+    }
+    return undefined;
+}
+function writeClaudeHooks(project, options = {}) {
+    const { projectDir, warnings } = resolveClaudeProjectDir(project);
+    const settingsPath = claudeSettingsPath(projectDir, Boolean(options.shared));
+    const settings = readJsonFile(settingsPath);
+    const existing = existingClaudeHookMode(settings);
+    const mode = options.mode || existing?.mode || "observe";
+    const failOpen = options.failOpen ?? existing?.failOpen ?? false;
+    const before = JSON.stringify(settings);
+    settings.hooks ||= {};
+    removeExistingGuardHooks(settings.hooks);
+    for (const event of HOOK_EVENTS)
+        installHook(settings, event, mode, failOpen);
+    const changed = before !== JSON.stringify(settings);
+    if (options.write !== false && changed)
+        writeJsonFile(settingsPath, settings);
+    if (options.write !== false)
+        installClaudeGoalCommand(projectDir);
+    return { settingsPath, projectDir, mode, failOpen, changed, warnings };
+}
 function removeExistingCodexHooks(hooks) {
     for (const event of Object.keys(hooks || {})) {
         hooks[event] = Array.isArray(hooks[event])
@@ -304,7 +339,7 @@ function toolResponse(input) {
 }
 function eventType(event) {
     if (event === "UserPromptSubmit")
-        return "agent.message";
+        return "agent.turn";
     if (event === "PermissionRequest" || event === "permission.asked")
         return "approval.requested";
     if (event === "PermissionDenied" || event === "approval.denied")
@@ -421,40 +456,65 @@ function previewForResponse(input) {
     return compactString(firstPresent(input.response_preview, input.responsePreview, input.output_preview, input.outputPreview, input.last_assistant_message, input.result_summary), 1200);
 }
 function humanSummary(input, event, runtime) {
-    const explicit = firstPresent(input.human_summary, input.te_display_summary, input.summary);
-    const safeExplicit = safeDescriptiveText(explicit);
-    if (safeExplicit)
-        return safeExplicit;
     const tool = toolName(input);
     const failure = hookFailureData(input);
-    if (event === "PermissionRequest")
-        return tool ? `Approval requested for ${tool}.` : "Approval requested.";
+    if (event === "UserPromptSubmit")
+        return "User submitted a prompt.";
+    if (event === "PermissionRequest" || event === "permission.asked")
+        return "Approval requested.";
     if (event === "PermissionDenied")
-        return tool ? `Approval denied for ${tool}.` : "Approval denied.";
-    if (event === "permission.asked")
-        return tool ? `OpenCode asked permission for ${tool}.` : "OpenCode asked permission.";
+        return "Approval denied.";
     if (event === "permission.replied")
         return permissionGranted(input) ? "OpenCode permission approved." : "OpenCode permission denied.";
     if (event === "SubagentStart")
-        return `Started subagent: ${subagentTaskName(input) || input.agent_type || "delegated task"}`;
+        return "Started a delegated task.";
     if (event === "SubagentStop")
-        return `Subagent finished: ${subagentResultSummary(input) || "task completed"}`;
+        return failure.failed ? "Delegated task failed." : "Delegated task completed.";
     if (event === "Stop")
-        return safeDescriptiveText(input.last_assistant_message || input.response_preview, 240) || "Agent response completed.";
-    if (event === "SessionEnd") {
-        return safeDescriptiveText(input.last_assistant_message || input.response_preview, 240) ||
-            `${traceRuntimeLabel(runtime)} session completed.`;
-    }
+        return failure.failed ? "Agent response failed." : "Agent response completed.";
+    if (event === "SessionEnd")
+        return failure.failed ? `${traceRuntimeLabel(runtime)} session failed.` : `${traceRuntimeLabel(runtime)} session completed.`;
     if (event === "PreToolUse" || event === "tool.execute.before")
-        return tool ? safeToolSummary(input, false) : undefined;
+        return operationSummary(operationClass(input), "proposed");
     if (event === "PostToolUse" || event === "PostToolUseFailure" || event === "tool.execute.after") {
-        if (!tool)
-            return failure.failed ? "Tool failed." : "Tool completed.";
-        if (failure.failed)
-            return `${friendlyToolLabel(tool)} failed${failure.exit_code !== undefined ? ` with exit ${failure.exit_code}` : ""}.`;
-        return safeToolSummary(input, true);
+        return operationSummary(operationClass(input), failure.failed ? "failed" : "succeeded");
     }
-    return promptSummary(input);
+    return event === "SessionStart" ? "Session started." : "Agent lifecycle event recorded.";
+}
+function operationClass(input) {
+    const name = String(toolName(input) || "").toLowerCase();
+    const command = String(firstPresent(toolInput(input)?.command, toolInput(input)?.cmd, toolInput(input)?.script) || "").toLowerCase();
+    if (/read|view|cat/.test(name))
+        return "file_read";
+    if (/write|edit|patch|notebook/.test(name))
+        return "file_change";
+    if (/grep|glob|search|find/.test(name) || /(^|\s)(rg|grep|find)(\s|$)/.test(command))
+        return "repository_search";
+    if (/^git\b/.test(command))
+        return "git_inspection";
+    if (/(^|\s)(pytest|rspec|rails test|npm test|npm run test|yarn test|pnpm test|go test|cargo test)(\s|$)/.test(command))
+        return "test_runner";
+    if (/(^|\s)(curl|wget|httpie)(\s|$)/.test(command) || /http|fetch|request/.test(name))
+        return "http_client";
+    if (/bash|shell|terminal|command|exec/.test(name))
+        return "shell_command";
+    return "tool_operation";
+}
+function operationSummary(operation, status) {
+    const base = {
+        repository_search: "Searched the repository",
+        file_read: "Read a source file",
+        file_change: "Modified a source file",
+        git_inspection: "Inspected Git changes",
+        test_runner: "Ran the test suite",
+        http_client: "Called an external service",
+        shell_command: "Ran a shell command",
+        tool_operation: "Ran a tool",
+    };
+    const phrase = base[operation] || base.tool_operation;
+    if (status === "proposed")
+        return `${phrase}.`;
+    return `${phrase} ${status === "failed" ? "unsuccessfully" : "successfully"}.`;
 }
 function safeRelativePath(value, cwd) {
     const raw = String(value || "").trim();
@@ -629,6 +689,9 @@ function nativeParentTaskSeed(input, event, runtime) {
     return nativeTaskSeed(input, "UserPromptSubmit", runtime);
 }
 function nativeEventId(input, event, runtime) {
+    const callId = toolCallId(input, runtime);
+    if (TOOL_LIFECYCLE_EVENTS.has(event) && callId)
+        return `evt_${sha([runtime, "tool", callId].join(":")).slice(0, 24)}`;
     return `evt_${sha([runtime, nativeTaskSeed(input, event, runtime), event].join(":")).slice(0, 24)}`;
 }
 function nativeParentEventId(input, event, runtime) {
@@ -637,14 +700,12 @@ function nativeParentEventId(input, event, runtime) {
     }
     if (event === "SessionStart" || event === "UserPromptSubmit")
         return undefined;
-    if (event === "PostToolUse" || event === "PostToolUseFailure")
-        return nativeEventId(input, "PreToolUse", runtime);
-    if (event === "tool.execute.after")
-        return nativeEventId(input, "tool.execute.before", runtime);
     if (event === "SubagentStop")
         return nativeEventId(input, "SubagentStart", runtime);
     if (event === "TaskComplete" || event === "TaskCompleted" || event === "TaskCancel")
         return nativeEventId(input, "TaskStart", runtime);
+    if (input.root_event_id)
+        return String(input.root_event_id);
     return nativeEventId(input, "UserPromptSubmit", runtime);
 }
 function nativeTaskId(input, event, runtime) {
@@ -658,14 +719,16 @@ function nativeEventMetadata(input, event, runtime) {
     const callId = toolCallId(input, runtime);
     const turnId = stableTurnId(input, runtime);
     const failure = hookFailureData(input);
-    const inputPreview = previewForInput(input);
-    const responsePreview = previewForResponse(input);
     const summary = humanSummary(input, event, runtime);
     const cliEntrypoint = resolvedCliEntrypoint();
+    const operation = operationClass(input);
+    const command = firstPresent(toolInput(input)?.command, toolInput(input)?.cmd, toolInput(input)?.script);
+    const response = toolResponse(input);
+    const durationMs = Number(firstPresent(input.duration_ms, input.durationMs, response?.duration_ms, response?.durationMs));
+    const resultCount = Number(firstPresent(input.result_count, input.resultCount, response?.result_count, response?.resultCount));
     return {
         native_event_contract_version: NATIVE_EVENT_CONTRACT_VERSION,
         cli_version: version_1.CLI_VERSION,
-        resolved_hook_command_path: cliEntrypoint,
         resolved_hook_command_path_hash: sha(cliEntrypoint),
         native_correlation_source: runtime,
         runtime,
@@ -681,15 +744,16 @@ function nativeEventMetadata(input, event, runtime) {
         parent_task_id: nativeParentTaskId(input, event, runtime),
         turn_id: turnId,
         tool_call_id: callId,
-        agent_id: input.agent_id,
-        parent_agent_id: input.parent_agent_id,
-        subagent_type: input.agent_type,
-        subagent_task: subagentTaskName(input),
-        subagent_result: subagentResultSummary(input),
         native_lifecycle_event: event,
         native_event_type: eventType(event),
-        input_preview: inputPreview,
-        response_preview: responsePreview,
+        trace_id: input.trace_id,
+        span_id: input.span_id,
+        parent_span_id: input.parent_span_id,
+        operation_class: operation,
+        command_hash: command ? `sha256:${sha(command)}` : undefined,
+        output_hash: Object.keys(response || {}).length ? `sha256:${sha(JSON.stringify(compact(response)))}` : undefined,
+        duration_ms: Number.isFinite(durationMs) ? durationMs : undefined,
+        result_count: Number.isFinite(resultCount) ? resultCount : undefined,
         human_summary: summary,
         te_display_summary: summary,
         summary_source: summary ? "native_hook_redacted" : undefined,
@@ -713,7 +777,7 @@ function nativeTurnStatePath(input, runtime) {
 function readNativeTurnState(input, runtime) {
     try {
         const state = readJsonFile(nativeTurnStatePath(input, runtime));
-        return state.turn_id && state.run_id && state.request_id ? state : undefined;
+        return state.turn_id && state.run_id && state.request_id && state.trace_id && state.root_span_id && state.root_event_id ? state : undefined;
     }
     catch {
         return undefined;
@@ -742,25 +806,58 @@ function prepareTurnScopedTraceInput(input, event, runtime) {
         clearNativeTurnState(input, runtime);
         return input;
     }
-    let turnId = boundedId(firstPresent(input.turn_id, input.turnId));
-    if (event === "UserPromptSubmit" && !turnId)
-        turnId = `turn_${runtimeSlug(runtime)}_${crypto.randomUUID()}`;
-    if (turnId) {
+    if (event === "UserPromptSubmit") {
+        const turnId = boundedId(firstPresent(input.turn_id, input.turnId)) || `turn_${runtimeSlug(runtime)}_${crypto.randomUUID()}`;
         const enriched = { ...input, turn_id: turnId };
+        const rootEventId = nativeEventId(enriched, event, runtime);
         const state = {
             session_id: safeSessionId(enriched),
             turn_id: turnId,
             run_id: runIdFor(enriched, runtime),
             request_id: requestIdFor(enriched, runtime),
+            trace_id: crypto.randomBytes(16).toString("hex"),
+            root_span_id: crypto.randomBytes(8).toString("hex"),
+            root_event_id: rootEventId,
+            tool_spans: {},
             updated_at: new Date().toISOString(),
         };
         writeNativeTurnState(input, runtime, state);
-        return { ...enriched, run_id: state.run_id, request_id: state.request_id };
+        return {
+            ...enriched,
+            run_id: state.run_id,
+            request_id: state.request_id,
+            trace_id: state.trace_id,
+            span_id: state.root_span_id,
+            root_event_id: state.root_event_id,
+        };
     }
     const state = readNativeTurnState(input, runtime);
-    return state
-        ? { ...input, turn_id: state.turn_id, run_id: state.run_id, request_id: state.request_id }
-        : input;
+    if (!state)
+        return input;
+    const callId = toolCallId(input, runtime);
+    let spanId;
+    if (TOOL_LIFECYCLE_EVENTS.has(event) && callId) {
+        spanId = state.tool_spans[callId] || crypto.randomBytes(8).toString("hex");
+        if (!state.tool_spans[callId]) {
+            state.tool_spans[callId] = spanId;
+            state.updated_at = new Date().toISOString();
+            writeNativeTurnState(input, runtime, state);
+        }
+    }
+    else {
+        spanId = crypto.createHash("sha256").update(`${state.trace_id}:${event}:${eventInputId(input) || "event"}`).digest("hex").slice(0, 16);
+    }
+    return {
+        ...input,
+        turn_id: state.turn_id,
+        run_id: state.run_id,
+        request_id: state.request_id,
+        trace_id: state.trace_id,
+        span_id: spanId,
+        parent_span_id: event === "UserPromptSubmit" ? undefined : state.root_span_id,
+        root_event_id: state.root_event_id,
+        traceparent: `00-${state.trace_id}-${state.root_span_id}-01`,
+    };
 }
 function sidecarRunIds(runtime, command) {
     const seed = [runtime, command.join(" "), process.cwd(), Date.now(), process.pid].join(":");
@@ -1119,7 +1216,7 @@ async function waitForProbeTrace(client, runId, requestId, requiredEvents) {
 }
 async function runClaudeDoctorProbe(client, projectDir, shared = false) {
     const settings = readJsonFile(claudeSettingsPath(projectDir, shared));
-    const requiredEvents = ["SessionStart", "PreToolUse", "PostToolUse"];
+    const requiredEvents = ["UserPromptSubmit", "PreToolUse", "PostToolUse"];
     const suffix = crypto.randomBytes(8).toString("hex");
     const ids = {
         runId: `run_claude_probe_${suffix}`,
@@ -1264,17 +1361,13 @@ function spawnObservedCommand(command, args, env) {
 }
 async function recordSidecarRun(client, runtime, command, ids, status, eventStatusValue, exitCode) {
     const now = new Date().toISOString();
-    const goal = (0, goal_context_1.goalMetadata)(undefined, ids.sessionId);
-    const workspace = workspaceMetadata({});
-    const safeCommand = redact(command.join(" ")).slice(0, 400);
-    const input = { session_id: ids.sessionId, command: safeCommand };
+    const input = { session_id: ids.sessionId };
     const lifecycleEvent = eventStatusValue === "started" ? "SessionStart" : "SessionEnd";
     const nativeMetadata = nativeEventMetadata(input, lifecycleEvent, runtime);
-    const modelMetadata = modelEnvMetadata();
     await client.createTrace({
         run_id: ids.runId,
         request_id: ids.requestId,
-        name: `${traceRuntimeLabel(runtime)} - ${command[0] || "command"}`,
+        name: `${traceRuntimeLabel(runtime)} session`,
         runtime,
         telemetry_source: "sidecar",
         status,
@@ -1284,15 +1377,11 @@ async function recordSidecarRun(client, runtime, command, ids, status, eventStat
             session_id: ids.sessionId,
             conversation_id: ids.sessionId,
             thread_id: ids.sessionId,
-            ...workspace,
-            command: safeCommand,
-            ...modelMetadata,
             ...nativeMetadata,
             framework: runtime,
             source: "te_guard_run",
             telemetry_source: "sidecar",
             exit_code: exitCode,
-            ...goal,
         },
         events: [
             {
@@ -1310,12 +1399,8 @@ async function recordSidecarRun(client, runtime, command, ids, status, eventStat
                     runtime,
                     source: "te_guard_run",
                     telemetry_source: "sidecar",
-                    command: safeCommand,
-                    ...modelMetadata,
                     ...nativeMetadata,
-                    ...workspace,
                     exit_code: exitCode,
-                    ...goal,
                 }),
             },
         ],
@@ -1347,18 +1432,14 @@ async function recordTrace(client, input, event, decision, runtime = "claude_cod
     const requestId = requestIdFor(input, runtime);
     const tool = toolName(input);
     const now = new Date().toISOString();
-    const goal = (0, goal_context_1.goalMetadata)(input.cwd, sessionId(input));
-    const nativeGoal = nativeGoalMetadata(input, event, runtime);
-    const workspace = workspaceMetadata(input);
     const nativeMetadata = nativeEventMetadata(input, event, runtime);
-    const modelMetadata = modelEnvMetadata();
     const failure = hookFailureData(input);
     const turnFinished = event === "Stop" || event === "StopFailure" || event === "SessionEnd";
     const runStatus = turnFinished ? (failure.failed || event === "StopFailure" ? "failed" : "succeeded") : "running";
     await client.createTrace({
         run_id: runId,
         request_id: requestId,
-        name: input.cwd ? `${traceRuntimeLabel(runtime)} - ${path.basename(String(input.cwd))}` : traceRuntimeLabel(runtime),
+        name: `${traceRuntimeLabel(runtime)} turn`,
         runtime,
         telemetry_source: "sidecar",
         status: runStatus,
@@ -1368,25 +1449,17 @@ async function recordTrace(client, input, event, decision, runtime = "claude_cod
             run_id: runId,
             telemetry_source: "sidecar",
             session_id: safeSessionId(input),
-            conversation_id: input.conversation_id || input.thread_id || sessionId(input),
-            thread_id: threadId(input),
-            ...workspace,
-            ...modelMetadata,
+            conversation_id: safeThreadId(input),
+            thread_id: safeThreadId(input),
             turn_id: nativeMetadata.turn_id,
             task_id: nativeMetadata.task_id,
             parent_task_id: nativeMetadata.parent_task_id,
             tool_call_id: nativeMetadata.tool_call_id,
-            input_preview: nativeMetadata.input_preview,
-            response_preview: nativeMetadata.response_preview,
             human_summary: nativeMetadata.human_summary,
             te_display_summary: nativeMetadata.te_display_summary,
             error: nativeMetadata.error,
             exit_code: nativeMetadata.exit_code,
-            agent_id: input.agent_id,
-            parent_agent_id: input.parent_agent_id,
             ...nativeMetadata,
-            ...goal,
-            ...nativeGoal,
         },
         events: [
             {
@@ -1399,35 +1472,28 @@ async function recordTrace(client, input, event, decision, runtime = "claude_cod
                     request_id: requestId,
                     run_id: runId,
                     session_id: safeSessionId(input),
-                    conversation_id: input.conversation_id || input.thread_id || sessionId(input),
-                    thread_id: threadId(input),
+                    conversation_id: safeThreadId(input),
+                    thread_id: safeThreadId(input),
                     hook_event: event,
                     phase: toolExecutionPhase(event, input) || (event === "PermissionDenied" ? "blocked" : event === "PermissionRequest" ? "proposed" : event),
-                    name: tool || event,
-                    tool_name: tool,
+                    name: nativeMetadata.operation_class || event,
+                    tool_name: tool ? friendlyToolLabel(tool) : undefined,
                     tool_call_id: nativeMetadata.tool_call_id,
                     turn_id: nativeMetadata.turn_id,
-                    input_preview: nativeMetadata.input_preview,
-                    response_preview: nativeMetadata.response_preview,
                     human_summary: nativeMetadata.human_summary,
                     te_display_summary: nativeMetadata.te_display_summary,
                     error: failure.error,
                     exit_code: failure.exit_code,
                     success: failure.failed ? false : undefined,
                     ok: failure.failed ? false : undefined,
-                    ...workspace,
-                    ...modelMetadata,
-                    prompt_summary: event === "UserPromptSubmit" ? promptSummary(input) : undefined,
-                    final_response: event === "Stop" || event === "SessionEnd" ? nativeMetadata.response_preview : undefined,
                     task_id: nativeMetadata.task_id,
                     parent_task_id: nativeMetadata.parent_task_id,
-                    agent_id: input.agent_id,
-                    parent_agent_id: input.parent_agent_id,
                     ...nativeMetadata,
                     decision,
-                    ...goal,
-                    ...nativeGoal,
                 }),
+                trace_id: input.trace_id,
+                span_id: input.span_id,
+                parent_span_id: input.parent_span_id,
             },
         ],
     });
@@ -1471,6 +1537,8 @@ function registerGuardCommands(program, getClient) {
         .command("run")
         .description("Run a local agent command with sidecar lifecycle tracing")
         .option("--runtime <runtime>", "Runtime label, e.g. codex, anthropic_sdk, custom", "custom")
+        .option("--project <dir>", "Project directory used for native runtime hooks", process.cwd())
+        .option("--no-install-hooks", "Do not install or refresh native runtime hooks before launch")
         .allowUnknownOption(true)
         .argument("[command...]", "Command to run after --")
         .action(async (commandParts, opts) => {
@@ -1478,11 +1546,23 @@ function registerGuardCommands(program, getClient) {
             console.error("Usage: te guard run --runtime codex -- codex");
             process.exit(1);
         }
-        const runtime = String(opts.runtime || "custom");
+        const runtime = String(opts.runtime || "custom").replace(/-/g, "_");
         const [command, ...args] = commandParts;
         const ids = sidecarRunIds(runtime, commandParts);
         const client = getClient();
         const activeGoal = (0, goal_context_1.loadGoalContext)();
+        if (runtime === "claude_code" && opts.installHooks !== false) {
+            try {
+                const installed = writeClaudeHooks(opts.project || process.cwd());
+                if (installed.changed) {
+                    console.log(`Installed Claude Code tool telemetry hooks in ${installed.settingsPath}`);
+                    console.log(`Mode: ${claudeInstallModeSummary(installed.mode, installed.failOpen)}`);
+                }
+            }
+            catch (err) {
+                console.error(`Tuning Engines guard warning: Claude Code hooks could not be activated: ${err.message}`);
+            }
+        }
         if (!TURN_SCOPED_RUNTIMES.has(runtime)) {
             try {
                 await recordSidecarRun(client, runtime, commandParts, ids, "running", "started");
@@ -1658,7 +1738,8 @@ function registerGuardCommands(program, getClient) {
             if (event === "PreToolUse") {
                 decision = await evaluatePreToolUse(client, input, event, mode);
             }
-            await recordTrace(client, input, event, decision);
+            if (event !== "SessionStart")
+                await recordTrace(client, input, event, decision);
             appendClaudeHookStatusForInput(input, event, "uploaded");
             if (event === "SessionEnd")
                 clearNativeTurnState(rawInput, "claude_code");
