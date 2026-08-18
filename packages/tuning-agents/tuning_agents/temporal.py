@@ -6,6 +6,10 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Callable
 
+from pydantic import TypeAdapter
+
+_JSONABLE_ADAPTER = TypeAdapter(Any)
+
 if TYPE_CHECKING:
     from .client import TuningClient
 
@@ -80,6 +84,12 @@ def _activity_defn(fn: Callable[..., Any]) -> Callable[..., Any]:
     return activity.defn(fn)
 
 
+def _jsonable(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json", warnings=False)
+    return _JSONABLE_ADAPTER.dump_python(value, mode="json", warnings=False)
+
+
 @_activity_defn
 async def chat_completion_activity(payload: dict[str, Any]) -> dict[str, Any]:
     client = _client_from_payload(payload)
@@ -92,7 +102,7 @@ async def chat_completion_activity(payload: dict[str, Any]) -> dict[str, Any]:
         approval_id=payload.get("approval_id"),
         metadata=metadata,
     )
-    return response.model_dump(mode="json") if hasattr(response, "model_dump") else response
+    return _jsonable(response)
 
 
 @_activity_defn

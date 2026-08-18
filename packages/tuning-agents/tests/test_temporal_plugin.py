@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -92,6 +92,21 @@ def test_agent_run_input_allows_worker_env_key():
     request = AgentRunInput(model="test-model")
 
     assert request.api_key is None
+
+
+@pytest.mark.asyncio
+async def test_chat_activity_suppresses_model_serializer_warnings(monkeypatch):
+    response = Mock()
+    response.model_dump.return_value = {"metadata": {"te_tools_present": True}}
+    client = Mock()
+    client.trace.run_id = "run_test"
+    client.chat.return_value = response
+    monkeypatch.setattr(temporal_module, "_client_from_payload", lambda payload: client)
+
+    result = await temporal_module.chat_completion_activity({"messages": []})
+
+    assert result == {"metadata": {"te_tools_present": True}}
+    response.model_dump.assert_called_once_with(mode="json", warnings=False)
 
 
 @pytest.mark.asyncio

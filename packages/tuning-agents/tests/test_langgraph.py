@@ -7,24 +7,24 @@ import tuning_agents.langgraph as adapter
 
 def test_create_agent_forwards_approval(monkeypatch):
     captured = {}
+    agents_module = ModuleType("langchain.agents")
+    langchain_module = ModuleType("langchain")
     openai_module = ModuleType("langchain_openai")
-    prebuilt_module = ModuleType("langgraph.prebuilt")
-    langgraph_module = ModuleType("langgraph")
 
     class ChatOpenAI:
         def __init__(self, **kwargs):
             captured["llm"] = kwargs
 
-    def create_react_agent(llm, tools, **kwargs):
+    def create_agent(llm, tools, **kwargs):
         captured["agent"] = (llm, tools, kwargs)
         return "agent"
 
     openai_module.ChatOpenAI = ChatOpenAI
-    prebuilt_module.create_react_agent = create_react_agent
-    langgraph_module.prebuilt = prebuilt_module
+    agents_module.create_agent = create_agent
+    langchain_module.agents = agents_module
+    monkeypatch.setitem(sys.modules, "langchain", langchain_module)
+    monkeypatch.setitem(sys.modules, "langchain.agents", agents_module)
     monkeypatch.setitem(sys.modules, "langchain_openai", openai_module)
-    monkeypatch.setitem(sys.modules, "langgraph", langgraph_module)
-    monkeypatch.setitem(sys.modules, "langgraph.prebuilt", prebuilt_module)
 
     mcp_tools = Mock(return_value=[])
     agent_tools = Mock(return_value=[])
@@ -43,9 +43,11 @@ def test_create_agent_forwards_approval(monkeypatch):
         client,
         agent_names=["support"],
         approval_id="apr_test",
+        prompt="Be concise",
     )
 
     assert result == "agent"
     assert captured["llm"]["default_headers"] == {"X-TE-Approval-ID": "apr_test"}
     assert mcp_tools.call_args.kwargs["approval_id"] == "apr_test"
     assert agent_tools.call_args.kwargs["approval_id"] == "apr_test"
+    assert captured["agent"][2]["system_prompt"] == "Be concise"
