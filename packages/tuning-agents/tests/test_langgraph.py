@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import tuning_agents.langgraph as adapter
 
 
-def test_create_agent_forwards_approval(monkeypatch):
+def test_create_react_agent_forwards_approval(monkeypatch):
     captured = {}
     openai_module = ModuleType("langchain_openai")
     prebuilt_module = ModuleType("langgraph.prebuilt")
