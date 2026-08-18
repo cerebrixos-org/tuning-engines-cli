@@ -8,6 +8,7 @@ from typing import Any, Callable
 from .temporal import (
     TuningEnginesTemporalFeatures,
     _activity_defn,
+    _jsonable,
     flush_trace_activity,
     record_state_reference_activity,
 )
@@ -147,7 +148,7 @@ async def react_agent_activity(payload: dict[str, Any]) -> dict[str, Any]:
                 message="ReAct agent activity completed",
             )
         )
-        return {"result": result, "trace": client.trace.as_dict()}
+        return _jsonable({"result": result, "trace": client.trace.as_dict()})
     except Exception as exc:
         await publish_react_stream_event(
             ReactStreamEvent(

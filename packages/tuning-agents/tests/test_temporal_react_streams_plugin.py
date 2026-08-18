@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from pydantic import BaseModel
 
 import tuning_agents.client as client_module
 import tuning_agents.langgraph as langgraph_module
@@ -18,6 +19,10 @@ from tuning_agents.temporal_react_streams import (
     tuning_temporal_react_streams_activities_for,
     tuning_temporal_react_streams_activity_names,
 )
+
+
+class Message(BaseModel):
+    content: str
 
 
 def test_react_streams_plugin_has_separate_name_and_surface():
@@ -117,7 +122,11 @@ async def test_react_activity_forwards_approval(monkeypatch):
         "create_tuning_langgraph_agent",
         lambda _client, **kwargs: captured.update(kwargs) or "agent",
     )
-    monkeypatch.setattr(langgraph_module, "invoke_with_trace", lambda *args, **kwargs: "done")
+    monkeypatch.setattr(
+        langgraph_module,
+        "invoke_with_trace",
+        lambda *args, **kwargs: {"messages": [Message(content="done")]},
+    )
     monkeypatch.setattr(react_streams_module, "publish_react_stream_event", AsyncMock())
 
     result = await react_streams_module.react_agent_activity(
@@ -128,5 +137,5 @@ async def test_react_activity_forwards_approval(monkeypatch):
         }
     )
 
-    assert result["result"] == "done"
+    assert result["result"] == {"messages": [{"content": "done"}]}
     assert captured["approval_id"] == "apr_test"
