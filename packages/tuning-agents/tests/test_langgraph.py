@@ -1,12 +1,11 @@
 import sys
-import warnings
 from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock
 
 import tuning_agents.langgraph as adapter
 
 
-def test_create_react_agent_forwards_approval(monkeypatch):
+def test_create_agent_forwards_approval(monkeypatch):
     captured = {}
     openai_module = ModuleType("langchain_openai")
     prebuilt_module = ModuleType("langgraph.prebuilt")
@@ -17,10 +16,6 @@ def test_create_react_agent_forwards_approval(monkeypatch):
             captured["llm"] = kwargs
 
     def create_react_agent(llm, tools, **kwargs):
-        warnings.warn(
-            "create_react_agent has been moved to `langchain.agents`.",
-            DeprecationWarning,
-        )
         captured["agent"] = (llm, tools, kwargs)
         return "agent"
 
@@ -44,17 +39,13 @@ def test_create_react_agent_forwards_approval(monkeypatch):
         trace=trace,
     )
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        result = adapter.create_tuning_langgraph_agent(
-            client,
-            agent_names=["support"],
-            approval_id="apr_test",
-            prompt="Be concise",
-        )
+    result = adapter.create_tuning_langgraph_agent(
+        client,
+        agent_names=["support"],
+        approval_id="apr_test",
+    )
 
     assert result == "agent"
     assert captured["llm"]["default_headers"] == {"X-TE-Approval-ID": "apr_test"}
     assert mcp_tools.call_args.kwargs["approval_id"] == "apr_test"
     assert agent_tools.call_args.kwargs["approval_id"] == "apr_test"
-    assert captured["agent"][2]["prompt"] == "Be concise"

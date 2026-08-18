@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import warnings
 from typing import Any
 
 from .client import TuningClient
@@ -70,13 +69,7 @@ def create_tuning_langgraph_agent(
         {"model": model, "tools": [getattr(tool, "name", None) for tool in tools]},
     )
     try:
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                message=r"create_react_agent has been moved to `langchain\.agents`.*",
-                category=DeprecationWarning,
-            )
-            agent = create_react_agent(llm, tools, **kwargs)
+        agent = create_react_agent(llm, tools, **kwargs)
         client.trace.finish(span_id, {"tool_count": len(tools)})
         return agent
     except Exception as exc:
