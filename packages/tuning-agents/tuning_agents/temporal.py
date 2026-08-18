@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from pydantic import TypeAdapter
 
+_JSONABLE_ADAPTER = TypeAdapter(Any)
+
 if TYPE_CHECKING:
     from .client import TuningClient
 
@@ -85,7 +87,7 @@ def _activity_defn(fn: Callable[..., Any]) -> Callable[..., Any]:
 def _jsonable(value: Any) -> Any:
     if hasattr(value, "model_dump"):
         return value.model_dump(mode="json", warnings=False)
-    return TypeAdapter(Any).dump_python(value, mode="json", warnings=False)
+    return _JSONABLE_ADAPTER.dump_python(value, mode="json", warnings=False)
 
 
 @_activity_defn
